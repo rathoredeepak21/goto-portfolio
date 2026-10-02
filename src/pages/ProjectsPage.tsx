@@ -6,12 +6,22 @@ import { Sparkles, Search } from 'lucide-react';
 interface ProjectsPageProps {
   projects: Project[];
   onViewDetails: (slug: string) => void;
+  onNavigate?: (tab: string, slug?: string) => void;
 }
 
-export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDetails }) => {
+export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDetails, onNavigate }) => {
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory>('all');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const q = searchQuery.trim().toLowerCase();
+      if (q === 'admin') {
+        onNavigate?.('admin');
+      }
+    }
+  };
 
   const filterTabs: Array<{ id: ProjectCategory; label: string }> = [
     { id: 'all', label: 'All Projects' },
@@ -29,6 +39,9 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDeta
   ];
 
   const filteredProjects = projects.filter((project) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (q === 'admin') return false;
+
     const matchesCategory = selectedCategory === 'all' || project.category === selectedCategory;
 
     const platforms =
@@ -42,7 +55,6 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDeta
       selectedPlatform === 'all' ||
       platforms.some((p) => p.toLowerCase().includes(selectedPlatform));
 
-    const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !q ||
       project.title.toLowerCase().includes(q) ||
@@ -88,9 +100,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDeta
             <Search size={16} className="search-icon" />
             <input
               type="text"
-              placeholder="Search by name, platform, tech..."
+              placeholder="Search apps or tech..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className="search-input"
             />
           </div>

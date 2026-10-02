@@ -18,12 +18,14 @@ interface SkillsPageProps {
   skills?: Technology[];
   technologies?: Technology[];
   categories?: TechnologyCategory[];
+  onNavigate?: (tab: string, slug?: string) => void;
 }
 
 export const SkillsPage: React.FC<SkillsPageProps> = ({
   skills,
   technologies: techProp,
   categories: categoriesProp,
+  onNavigate,
 }) => {
   // Use technologies prop or skills prop
   const allTechnologies: Technology[] = techProp || skills || [];
@@ -75,17 +77,30 @@ export const SkillsPage: React.FC<SkillsPageProps> = ({
     });
   }, [allTechnologies, categoriesProp]);
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const q = searchQuery.trim().toLowerCase();
+      if (q === 'admin') {
+        onNavigate?.('admin');
+      }
+    }
+  };
+
   // Filtered technologies based on search & category
   const filteredTechnologies = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (q === 'admin') return [];
+
     return allTechnologies.filter((tech) => {
       if (!tech.is_active) return false;
       const matchesCategory =
         selectedCategory === 'all' ||
         tech.category.toLowerCase() === selectedCategory.toLowerCase();
       const matchesSearch =
-        tech.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tech.description && tech.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        tech.category.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        tech.name.toLowerCase().includes(q) ||
+        (tech.description && tech.description.toLowerCase().includes(q)) ||
+        tech.category.toLowerCase().includes(q);
       return matchesCategory && matchesSearch;
     });
   }, [allTechnologies, selectedCategory, searchQuery]);
@@ -115,6 +130,7 @@ export const SkillsPage: React.FC<SkillsPageProps> = ({
               placeholder="Search technologies, tools, frameworks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className="skills-search-input"
             />
             {searchQuery && (

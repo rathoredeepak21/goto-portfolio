@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Sun, Moon, Shield, Menu, X, Terminal, ExternalLink } from 'lucide-react';
+import { Sun, Moon, Menu, X, Terminal, ExternalLink } from 'lucide-react';
 import { WebsiteSettings } from '../types';
 
 interface NavbarProps {
@@ -118,16 +118,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </button>
 
-          {/* Admin Access Pill */}
-          <button
-            onClick={() => handleLinkClick('admin')}
-            className={`admin-portal-btn ${currentTab.startsWith('admin') ? 'active-admin' : ''}`}
-            title="Admin Management Panel"
-          >
-            <Shield size={14} />
-            <span className="admin-btn-label">{isAdmin ? 'Admin' : 'Login'}</span>
-          </button>
-
           {/* Mobile Menu Toggle Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -228,21 +218,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <span className="theme-toggle-indicator">
                     {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => handleLinkClick('admin')}
-                  className={`mobile-extra-item mobile-admin-btn ${currentTab.startsWith('admin') ? 'mobile-nav-active' : ''}`}
-                >
-                  <div className="mobile-extra-left">
-                    <Shield size={18} className="extra-icon cyan" />
-                    <span className="extra-label">
-                      {isAdmin ? 'Admin Dashboard' : 'Admin Login'}
-                    </span>
-                  </div>
-                  <span className="admin-status-badge">
-                    {isAdmin ? 'Active' : 'Portal'}
                   </span>
                 </button>
               </div>
@@ -408,27 +383,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         .theme-icon {
           color: #ffffff;
-        }
-
-        .admin-portal-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.4rem;
-          padding: 0.4rem 0.85rem;
-          background: rgba(56, 189, 248, 0.08);
-          border: 1px solid var(--border-neon);
-          border-radius: var(--radius-full);
-          color: var(--neon-cyan);
-          font-size: 0.82rem;
-          font-weight: 600;
-          transition: all var(--transition-fast);
-        }
-
-        .admin-portal-btn:hover,
-        .active-admin {
-          background: var(--neon-cyan);
-          color: #070b14;
-          box-shadow: 0 0 15px rgba(56, 189, 248, 0.5);
         }
 
         .mobile-menu-trigger {
@@ -679,8 +633,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           color: #f59e0b;
         }
 
-        .theme-toggle-indicator,
-        .admin-status-badge {
+        .theme-toggle-indicator {
           font-size: 0.8rem;
           padding: 0.2rem 0.6rem;
           border-radius: var(--radius-full);
@@ -689,17 +642,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           border: 1px solid var(--border-subtle);
         }
 
-        [data-theme='light'] .theme-toggle-indicator,
-        [data-theme='light'] .admin-status-badge {
+        [data-theme='light'] .theme-toggle-indicator {
           background: #ffffff;
           border-color: #cbd5e1;
           color: #334155;
-        }
-
-        .mobile-admin-btn.mobile-nav-active {
-          background: rgba(56, 189, 248, 0.16);
-          border-color: var(--neon-cyan);
-          color: var(--neon-cyan);
         }
 
         .mobile-drawer-footer {
@@ -742,9 +688,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           }
           .mobile-menu-trigger {
             display: flex;
-          }
-          .admin-btn-label {
-            display: none;
           }
         }
       `}</style>

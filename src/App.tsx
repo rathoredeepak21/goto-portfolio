@@ -314,6 +314,7 @@ export function App() {
           <ProjectsPage
             projects={projects}
             onViewDetails={(slug) => handleNavigate('project-detail', slug)}
+            onNavigate={handleNavigate}
           />
         )}
 
@@ -338,6 +339,7 @@ export function App() {
           <SkillsPage
             technologies={technologies}
             categories={categories}
+            onNavigate={handleNavigate}
           />
         )}
 
