@@ -44,8 +44,9 @@ export function getSupabaseClient(): SupabaseClient | null {
     try {
       supabaseInstance = createClient(url, key, {
         auth: {
-          persistSession: false,
-          autoRefreshToken: false,
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
         },
       });
       activeCredentialsKey = credKey;

@@ -1,4 +1,4 @@
-import { Project, ApkRelease, Skill, Technology, TechnologyCategory, Platform, WebsiteContent, SocialLink, WebsiteSettings, AdminUser } from '../types';
+import { Project, ApkRelease, Skill, Technology, TechnologyCategory, Platform, WebsiteContent, SocialLink, WebsiteSettings } from '../types';
 import { generateAppScreenshot } from '../assets/mockScreenshots';
 
 export const initialPlatforms: Platform[] = [
@@ -744,12 +744,4 @@ export const initialWebsiteSettings: WebsiteSettings = {
   supabaseUrl: '',
   supabaseAnonKey: '',
   r2Endpoint: 'https://r2.gotop-technologies.com',
-};
-
-export const defaultAdminUser: AdminUser = {
-  id: 'admin-1',
-  email: 'admin@gotop.dev',
-  name: 'GoTop Admin',
-  role: 'admin',
-  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
 };

@@ -2,29 +2,32 @@ import React, { useState } from 'react';
 import { Shield, Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 interface AdminLoginProps {
-  onLogin: (email: string, pass: string) => boolean;
+  onLogin: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   onCancel: () => void;
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onCancel }) => {
-  const [email, setEmail] = useState('admin@gotop.dev');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg('');
 
-    setTimeout(() => {
-      const ok = onLogin(email, password);
-      setIsLoading(false);
-      if (!ok) {
-        setErrorMsg('Invalid credentials. Use demo: admin@gotop.dev / admin123');
+    try {
+      const res = await onLogin(email, password);
+      if (!res.success) {
+        setErrorMsg(res.error || 'Invalid email or password.');
       }
-    }, 400);
+    } catch {
+      setErrorMsg('Unable to sign in. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -44,17 +47,18 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onCancel }) => 
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="login-field">
-            <label htmlFor="login-email" className="login-label">Email / Username</label>
+            <label htmlFor="login-email" className="login-label">Email</label>
             <div className="input-with-icon">
               <Mail size={18} className="field-icon" />
               <input
                 id="login-email"
-                type="text"
+                type="email"
                 required
-                placeholder="Enter your email"
+                placeholder="Enter admin email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="login-input"
+                autoComplete="email"
               />
             </div>
           </div>
@@ -71,6 +75,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onCancel }) => 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="login-input"
+                autoComplete="current-password"
               />
               <button
                 type="button"
@@ -90,17 +95,17 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onCancel }) => 
         </form>
 
         <div className="login-footer-links">
-          <button type="button" onClick={() => alert('Demo Reset: Credentials are prefilled as admin@gotop.dev / admin123')} className="forgot-pass-btn">
+          <button
+            type="button"
+            onClick={() => alert('Password recovery: Password reset requests must be processed via Supabase Auth.')}
+            className="forgot-pass-btn"
+          >
             Forgot Password?
           </button>
           <span className="dot-sep">&bull;</span>
           <button type="button" onClick={onCancel} className="back-to-site-btn">
             Back to Website
           </button>
-        </div>
-
-        <div className="demo-credentials-hint">
-          <span>Demo Access: <strong>admin@gotop.dev</strong> / <strong>admin123</strong></span>
         </div>
       </div>
 
@@ -255,16 +260,6 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onCancel }) => 
 
         .dot-sep {
           color: var(--text-dim);
-        }
-
-        .demo-credentials-hint {
-          margin-top: 1.5rem;
-          padding: 0.6rem 1rem;
-          background: rgba(56, 189, 248, 0.08);
-          border: 1px dashed var(--border-neon);
-          border-radius: var(--radius-md);
-          font-size: 0.8rem;
-          color: var(--neon-cyan);
         }
       `}</style>
     </div>

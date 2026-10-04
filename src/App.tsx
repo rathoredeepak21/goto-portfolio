@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Shield } from 'lucide-react';
 import { Project, ApkRelease, Platform, Technology, TechnologyCategory, WebsiteContent, SocialLink, WebsiteSettings, AdminUser } from './types';
 import { dataService } from './services/dataService';
 import { Navbar } from './components/Navbar';
@@ -13,10 +14,34 @@ import { ContactPage } from './pages/ContactPage';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminLayout } from './pages/admin/AdminLayout';
 
+// URL path to tab mapper
+function getInitialTab(): string {
+  if (typeof window === 'undefined') return 'home';
+  const path = window.location.pathname.toLowerCase();
+  if (path.startsWith('/admin')) return 'admin';
+  if (path.startsWith('/about')) return 'about';
+  if (path.startsWith('/projects')) return 'projects';
+  if (path.startsWith('/project/')) return 'project-detail';
+  if (path.startsWith('/skills')) return 'skills';
+  if (path.startsWith('/contact')) return 'contact';
+  if (path.startsWith('/screenshots')) return 'screenshots';
+  return 'home';
+}
+
+function getInitialProjectSlug(): string {
+  if (typeof window === 'undefined') return 'rentora';
+  const path = window.location.pathname.toLowerCase();
+  if (path.startsWith('/project/')) {
+    const parts = path.split('/');
+    if (parts[2]) return parts[2];
+  }
+  return 'rentora';
+}
+
 export function App() {
   // Navigation State
-  const [currentTab, setCurrentTab] = useState<string>('home');
-  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>('rentora');
+  const [currentTab, setCurrentTab] = useState<string>(getInitialTab);
+  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(getInitialProjectSlug);
 
   // Global Data State
   const [projects, setProjects] = useState<Project[]>(() => dataService.getProjects());
@@ -31,7 +56,8 @@ export function App() {
     dataService.incrementVisitorCount();
     return dataService.getTrafficStats();
   });
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(() => dataService.getAdminUser());
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
 
   // Theme State
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -121,30 +147,82 @@ export function App() {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  // Navigation Handler
-  const handleNavigate = (tab: string, slug?: string) => {
+  // Supabase Auth Session Hydration & Listener
+  useEffect(() => {
+    let isMounted = true;
+
+    // Check active Supabase admin session on load
+    dataService.getAuthenticatedAdmin().then((user) => {
+      if (isMounted) {
+        setAdminUser(user);
+        setAuthLoading(false);
+      }
+    });
+
+    const unsubscribe = dataService.onAuthStateChange((user) => {
+      if (isMounted) {
+        setAdminUser(user);
+        setAuthLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // Listen to browser Back/Forward (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const tab = getInitialTab();
+      const slug = getInitialProjectSlug();
+      setCurrentTab(tab);
+      setSelectedProjectSlug(slug);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Navigation Handler with Browser History URL Synchronization
+  const handleNavigate = (tab: string, slug?: string, replaceHistory = false) => {
     setCurrentTab(tab);
     if (slug) {
       setSelectedProjectSlug(slug);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    let targetPath = '/';
+    if (tab === 'home') targetPath = '/';
+    else if (tab === 'admin') targetPath = '/admin';
+    else if (tab === 'project-detail' && slug) targetPath = `/project/${slug}`;
+    else targetPath = `/${tab}`;
+
+    if (typeof window !== 'undefined' && window.location.pathname !== targetPath) {
+      if (replaceHistory) {
+        window.history.replaceState({ tab, slug }, '', targetPath);
+      } else {
+        window.history.pushState({ tab, slug }, '', targetPath);
+      }
+    }
   };
 
-  // Admin Auth Handlers
-  const handleAdminLogin = (email: string, pass: string): boolean => {
-    const res = dataService.login(email, pass);
+  // Real Supabase Admin Auth Handlers
+  const handleAdminLogin = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+    const res = await dataService.login(email, pass);
     if (res.success && res.user) {
       setAdminUser(res.user);
       addToast('Welcome back, Admin!', 'success');
-      return true;
+      return { success: true };
     }
-    return false;
+    return { success: false, error: res.error || 'Invalid credentials' };
   };
 
-  const handleAdminLogout = () => {
-    dataService.logout();
+  const handleAdminLogout = async () => {
+    await dataService.logout();
     setAdminUser(null);
-    setCurrentTab('home');
+    handleNavigate('home', undefined, true);
     addToast('Logged out of admin panel');
   };
 
@@ -300,57 +378,73 @@ export function App() {
     addToast(`Downloading ${project.title} (${project.apkSize})...`, 'info');
   };
 
-  // If in Admin Mode and Authenticated, render complete Admin Layout
-  if (currentTab === 'admin' && adminUser) {
-    return (
-      <div className="app-container">
-        <AdminLayout
-          user={adminUser}
-          projects={projects}
-          apkReleases={apkReleases}
-          platforms={platforms}
-          technologies={technologies}
-          categories={categories}
-          content={content}
-          socialLinks={socialLinks}
-          settings={settings}
-          trafficStats={trafficStats}
-          theme={theme}
-          onToggleTheme={handleToggleTheme}
-          onLogout={handleAdminLogout}
-          onViewPublicSite={() => setCurrentTab('home')}
-          onPreviewProject={(slug) => {
-            setSelectedProjectSlug(slug);
-            setCurrentTab('project-detail');
-          }}
-          onSaveProject={handleSaveProject}
-          onDeleteProject={handleDeleteProject}
-          onSavePlatform={handleSavePlatform}
-          onDeletePlatform={handleDeletePlatform}
-          onReorderPlatforms={handleReorderPlatforms}
-          onSaveRelease={handleSaveRelease}
-          onDeleteRelease={handleDeleteRelease}
-          onSaveTechnology={handleSaveTechnology}
-          onDeleteTechnology={handleDeleteTechnology}
-          onReorderTechnologies={handleReorderTechnologies}
-          onSaveCategory={handleSaveCategory}
-          onDeleteCategory={handleDeleteCategory}
-          onSaveContent={handleSaveContent}
-          onSaveSocials={handleSaveSocials}
-          onSaveSettings={handleSaveSettings}
-          onRefreshAllData={handleRefreshAllData}
-        />
-
-        {/* Global Toasts */}
-        <div className="toast-container">
-          {toasts.map((t) => (
-            <div key={t.id} className="toast">
-              <span>{t.message}</span>
+  // If in Admin Mode, apply Admin Auth Guard
+  if (currentTab === 'admin') {
+    if (authLoading) {
+      return (
+        <div className="app-container" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="neon-card" style={{ padding: '2.5rem 3.5rem', textAlign: 'center', borderRadius: 'var(--radius-xl)' }}>
+            <div style={{ width: 64, height: 64, margin: '0 auto 1.25rem', borderRadius: '50%', background: 'var(--bg-tertiary)', border: '1px solid var(--border-neon)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--glow-cyan)' }}>
+              <Shield size={34} color="#38bdf8" />
             </div>
-          ))}
+            <p style={{ color: 'var(--text-main)', fontWeight: 600, marginBottom: '0.25rem' }}>Verifying Admin Authorization</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>Checking secure Supabase credentials...</p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
+
+    if (adminUser && adminUser.role === 'admin') {
+      return (
+        <div className="app-container">
+          <AdminLayout
+            user={adminUser}
+            projects={projects}
+            apkReleases={apkReleases}
+            platforms={platforms}
+            technologies={technologies}
+            categories={categories}
+            content={content}
+            socialLinks={socialLinks}
+            settings={settings}
+            trafficStats={trafficStats}
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
+            onLogout={handleAdminLogout}
+            onViewPublicSite={() => handleNavigate('home')}
+            onPreviewProject={(slug) => {
+              setSelectedProjectSlug(slug);
+              handleNavigate('project-detail', slug);
+            }}
+            onSaveProject={handleSaveProject}
+            onDeleteProject={handleDeleteProject}
+            onSavePlatform={handleSavePlatform}
+            onDeletePlatform={handleDeletePlatform}
+            onReorderPlatforms={handleReorderPlatforms}
+            onSaveRelease={handleSaveRelease}
+            onDeleteRelease={handleDeleteRelease}
+            onSaveTechnology={handleSaveTechnology}
+            onDeleteTechnology={handleDeleteTechnology}
+            onReorderTechnologies={handleReorderTechnologies}
+            onSaveCategory={handleSaveCategory}
+            onDeleteCategory={handleDeleteCategory}
+            onSaveContent={handleSaveContent}
+            onSaveSocials={handleSaveSocials}
+            onSaveSettings={handleSaveSettings}
+            onRefreshAllData={handleRefreshAllData}
+          />
+
+          {/* Global Toasts */}
+          <div className="toast-container">
+            {toasts.map((t) => (
+              <div key={t.id} className="toast">
+                <span>{t.message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
   }
 
   // Active Project for Detail & Screenshot views

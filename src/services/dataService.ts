@@ -21,7 +21,6 @@ import {
   initialWebsiteContent,
   initialSocialLinks,
   initialWebsiteSettings,
-  defaultAdminUser,
 } from './mockData';
 import { getSupabaseClient, resetSupabaseClient } from './supabaseClient';
 
@@ -36,7 +35,6 @@ const STORAGE_KEYS = {
   SOCIALS: 'gotop_socials_v2',
   SETTINGS: 'gotop_settings_v2',
   MESSAGES: 'gotop_messages_v2',
-  AUTH: 'gotop_admin_auth_v2',
   TRAFFIC: 'gotop_traffic_stats_v2',
 };
 
@@ -1180,35 +1178,131 @@ class DataService {
     }
   }
 
-  // ================= ADMIN AUTH =================
-  public getAdminUser(): AdminUser | null {
-    return this.getItem<AdminUser | null>(STORAGE_KEYS.AUTH, null);
-  }
-
-  public login(email: string, password: string): { success: boolean; user?: AdminUser; error?: string } {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (
-      (normalizedEmail === 'admin@gotop.dev' || normalizedEmail === 'admin' || normalizedEmail === 'admin@gotop-technologies.com') &&
-      password === 'admin123'
-    ) {
-      this.setItem(STORAGE_KEYS.AUTH, defaultAdminUser);
-      return { success: true, user: defaultAdminUser };
+  // ================= ADMIN AUTH (SUPABASE REAL AUTH & AUTHORIZATION) =================
+  public async login(email: string, password: string): Promise<{ success: boolean; user?: AdminUser; error?: string }> {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return { success: false, error: 'Database service is not configured. Please contact site administrator.' };
     }
 
-    if (normalizedEmail === 'admin' && (password === 'admin' || password === 'admin123')) {
-      this.setItem(STORAGE_KEYS.AUTH, defaultAdminUser);
-      return { success: true, user: defaultAdminUser };
+    try {
+      const trimmedEmail = email.trim();
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
+
+      if (authError || !authData.user) {
+        return { success: false, error: 'Invalid email or password.' };
+      }
+
+      // Check whether authenticated user has authorized 'admin' role in profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, avatar_url')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.warn('Error verifying admin authorization:', profileError.message);
+      }
+
+      // Strict Authorization Check: Must exist in profiles with role === 'admin'
+      if (!profile || profile.role !== 'admin') {
+        // Immediately sign the unauthorized user out
+        await supabase.auth.signOut();
+        return {
+          success: false,
+          error: 'You are not authorized to access the Admin Panel.',
+        };
+      }
+
+      const adminUser: AdminUser = {
+        id: authData.user.id,
+        email: authData.user.email || profile.email || trimmedEmail,
+        name: profile.full_name || 'GoTop Admin',
+        role: 'admin',
+        avatarUrl: profile.avatar_url || '',
+      };
+
+      return { success: true, user: adminUser };
+    } catch (err: any) {
+      console.warn('Supabase login exception:', err);
+      return { success: false, error: 'Unable to sign in. Please check your network and try again.' };
     }
-
-    return { success: false, error: 'Invalid email or password. Use demo: admin@gotop.dev / admin123' };
   }
 
-  public logout(): void {
-    localStorage.removeItem(STORAGE_KEYS.AUTH);
+  public async logout(): Promise<void> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Supabase signOut error:', err);
+      }
+    }
   }
 
-  public isAuthenticated(): boolean {
-    return this.getAdminUser() !== null;
+  public async getAuthenticatedAdmin(): Promise<AdminUser | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr || !session?.user) return null;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, avatar_url')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (profile && profile.role === 'admin') {
+        return {
+          id: session.user.id,
+          email: session.user.email || profile.email || '',
+          name: profile.full_name || 'GoTop Admin',
+          role: 'admin',
+          avatarUrl: profile.avatar_url || '',
+        };
+      }
+
+      // If user has a valid Supabase session but is not an authorized admin, sign them out
+      await supabase.auth.signOut();
+      return null;
+    } catch (err) {
+      console.warn('Failed to verify authenticated admin session:', err);
+      return null;
+    }
+  }
+
+  public onAuthStateChange(callback: (user: AdminUser | null) => void): (() => void) | null {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role, avatar_url')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (profile && profile.role === 'admin') {
+          callback({
+            id: session.user.id,
+            email: session.user.email || profile.email || '',
+            name: profile.full_name || 'GoTop Admin',
+            role: 'admin',
+            avatarUrl: profile.avatar_url || '',
+          });
+          return;
+        }
+      }
+      callback(null);
+    });
+
+    return () => subscription.unsubscribe();
   }
 
   public resetToFactoryDefaults(): void {
