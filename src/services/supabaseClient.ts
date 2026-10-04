@@ -21,8 +21,13 @@ export function getSupabaseCredentials(): { url: string; key: string } {
     import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     '';
 
-  const url = (settings.supabaseUrl && settings.supabaseUrl.trim()) || (envUrl && envUrl.trim()) || '';
+  let url = (settings.supabaseUrl && settings.supabaseUrl.trim()) || (envUrl && envUrl.trim()) || '';
   const key = (settings.supabaseAnonKey && settings.supabaseAnonKey.trim()) || (envKey && envKey.trim()) || '';
+
+  // Sanitize URL if user entered REST API URL like https://xyz.supabase.co/rest/v1/ or trailing slash
+  if (url) {
+    url = url.replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
+  }
 
   return { url, key };
 }
