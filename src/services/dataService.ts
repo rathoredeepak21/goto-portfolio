@@ -62,26 +62,6 @@ class DataService {
     }
   }
 
-  // ================= PROJECTS =================
-  public getProjects(): Project[] {
-    const list = this.getItem<Project[]>(STORAGE_KEYS.PROJECTS, initialProjects);
-    // Ensure every project has platforms defined
-    return list.map((p) => {
-      if (p.platforms && p.platforms.length > 0) return p;
-      const initP = initialProjects.find((ip) => ip.id === p.id || ip.slug === p.slug);
-      if (initP && initP.platforms && initP.platforms.length > 0) {
-        return { ...p, platforms: initP.platforms };
-      }
-      if (p.category === 'web') return { ...p, platforms: ['Web Application'] };
-      return { ...p, platforms: ['Android App'] };
-    });
-  }
-
-  public getProjectBySlug(slug: string): Project | undefined {
-    const projects = this.getProjects();
-    return projects.find((p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug);
-  }
-
   // Supabase Storage Bucket definitions matching user Supabase project
   public static readonly BUCKETS = {
     APP_ICON: { primary: 'App Icon', fallback: 'app-icon' },
@@ -99,13 +79,11 @@ class DataService {
     if (!supabase) return null;
 
     try {
-      // Try primary bucket first
       let usedBucket = bucketConfig.primary;
       let res = await supabase.storage
         .from(bucketConfig.primary)
         .upload(storagePath, file, { cacheControl: '3600', upsert: true });
 
-      // If primary bucket failed due to not found, try fallback slug
       if (res.error && (res.error.message?.toLowerCase().includes('not found') || res.error.message?.toLowerCase().includes('bucket'))) {
         const fallbackRes = await supabase.storage
           .from(bucketConfig.fallback)
@@ -134,7 +112,7 @@ class DataService {
     return null;
   }
 
-  // Upload actual project app icon to Supabase Storage 'App Icon' bucket (with data URL offline fallback)
+  // Upload actual project app icon to Supabase Storage 'App Icon' bucket
   public async uploadProjectIcon(
     projectId: string,
     file: File
@@ -180,7 +158,6 @@ class DataService {
         const [bucket, path] = storagePath.split('::');
         await supabase.storage.from(bucket).remove([path]);
       } else {
-        // Try App Icon, then fallback
         await supabase.storage.from(DataService.BUCKETS.APP_ICON.primary).remove([storagePath]);
       }
     } catch (err) {
@@ -279,12 +256,128 @@ class DataService {
     });
   }
 
-  public saveProject(project: Project): Project {
+  // ================= PROJECTS (MAPPING & CRUD) =================
+  private mapProjectFromDb(row: any): Project {
+    const rawIcon =
+      row.icon_url ||
+      row.iconUrl ||
+      (row.icon && (row.icon.startsWith('http') || row.icon.startsWith('data:') || row.icon.startsWith('/')) ? row.icon : undefined);
+
+    return {
+      id: String(row.id),
+      title: row.title || 'Untitled',
+      slug: row.slug || String(row.id),
+      subtitle: row.subtitle || '',
+      shortDescription: row.short_description ?? row.shortDescription ?? '',
+      fullDescription: row.full_description ?? row.fullDescription ?? '',
+      category: row.category || 'mobile',
+      icon: row.icon || 'home',
+      iconBg: row.icon_bg || row.iconBg || 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      icon_url: rawIcon,
+      iconUrl: rawIcon,
+      icon_storage_path: row.icon_storage_path || undefined,
+      version: row.version || 'v1.0.0',
+      apkSize: row.apk_size || row.apkSize || '15 MB',
+      lastUpdated: row.last_updated || row.lastUpdated || new Date().toISOString().split('T')[0],
+      featured: Boolean(row.featured),
+      playStoreEnabled: row.play_store_enabled !== undefined ? Boolean(row.play_store_enabled) : true,
+      playStoreUrl: row.play_store_url || row.playStoreUrl || '',
+      apkDownloadEnabled: row.apk_download_enabled !== undefined ? Boolean(row.apk_download_enabled) : true,
+      apkDownloadUrl: row.apk_download_url || row.apkDownloadUrl || '',
+      platforms: Array.isArray(row.platforms) && row.platforms.length > 0 ? row.platforms : ['Android App'],
+      technologies: Array.isArray(row.technologies) ? row.technologies : [],
+      features: Array.isArray(row.features) ? row.features : [],
+      screenshots: Array.isArray(row.screenshots) ? row.screenshots : [],
+    };
+  }
+
+  private mapProjectToDb(p: Project): any {
+    const normIcon =
+      p.icon_url ||
+      p.iconUrl ||
+      (p.icon && (p.icon.startsWith('http') || p.icon.startsWith('data:') || p.icon.startsWith('/')) ? p.icon : 'home');
+
+    return {
+      id: p.id,
+      title: p.title,
+      slug: p.slug || p.title.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      subtitle: p.subtitle || '',
+      short_description: p.shortDescription || '',
+      full_description: p.fullDescription || '',
+      category: p.category || 'mobile',
+      icon: normIcon,
+      icon_bg: p.iconBg || 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      icon_url: p.icon_url || p.iconUrl || null,
+      icon_storage_path: p.icon_storage_path || null,
+      version: p.version || 'v1.0.0',
+      apk_size: p.apkSize || '15 MB',
+      last_updated: p.lastUpdated || new Date().toISOString().split('T')[0],
+      featured: Boolean(p.featured),
+      play_store_enabled: Boolean(p.playStoreEnabled),
+      play_store_url: p.playStoreUrl || null,
+      apk_download_enabled: Boolean(p.apkDownloadEnabled),
+      apk_download_url: p.apkDownloadUrl || null,
+      platforms: p.platforms && p.platforms.length > 0 ? p.platforms : ['Android App'],
+      technologies: Array.isArray(p.technologies) ? p.technologies : [],
+      features: Array.isArray(p.features) ? p.features : [],
+      screenshots: Array.isArray(p.screenshots) ? p.screenshots : [],
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  public getProjects(): Project[] {
+    const list = this.getItem<Project[]>(STORAGE_KEYS.PROJECTS, initialProjects);
+    return list.map((p) => {
+      if (p.platforms && p.platforms.length > 0) return p;
+      const initP = initialProjects.find((ip) => ip.id === p.id || ip.slug === p.slug);
+      if (initP && initP.platforms && initP.platforms.length > 0) {
+        return { ...p, platforms: initP.platforms };
+      }
+      if (p.category === 'web') return { ...p, platforms: ['Web Application'] };
+      return { ...p, platforms: ['Android App'] };
+    });
+  }
+
+  public getProjectBySlug(slug: string): Project | undefined {
+    const projects = this.getProjects();
+    return projects.find((p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug);
+  }
+
+  public async fetchProjectsFromSupabase(): Promise<Project[] | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Supabase fetch projects error:', error.message);
+        return null;
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map((r) => this.mapProjectFromDb(r));
+        this.setItem(STORAGE_KEYS.PROJECTS, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch projects from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async saveProject(project: Project): Promise<Project> {
     const projects = this.getProjects();
     const index = projects.findIndex((p) => p.id === project.id);
     let updated: Project[];
 
-    const normalizedIconUrl = project.icon_url || project.iconUrl || (project.icon && (project.icon.startsWith('http') || project.icon.startsWith('data:') || project.icon.startsWith('/')) ? project.icon : undefined);
+    const normalizedIconUrl =
+      project.icon_url ||
+      project.iconUrl ||
+      (project.icon && (project.icon.startsWith('http') || project.icon.startsWith('data:') || project.icon.startsWith('/')) ? project.icon : undefined);
 
     const projectToSave: Project = {
       ...project,
@@ -307,32 +400,113 @@ class DataService {
 
     this.setItem(STORAGE_KEYS.PROJECTS, updated);
 
-    // If APK download is enabled and an APK url/version exists, ensure an APK release entry is synchronized
+    // Sync APK release entry if configured
     if (project.apkDownloadEnabled && project.apkDownloadUrl) {
       this.syncApkReleaseFromProject(projectToSave);
+    }
+
+    // Asynchronously upsert to Supabase
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const dbRow = this.mapProjectToDb(projectToSave);
+        const { error } = await supabase.from('projects').upsert(dbRow, { onConflict: 'id' });
+        if (error) {
+          console.warn('Supabase projects table upsert error:', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase saveProject error:', err);
+      }
     }
 
     return index >= 0 ? updated[index] : updated[0];
   }
 
-  public deleteProject(projectId: string): void {
+  public async deleteProject(projectId: string): Promise<void> {
     const project = this.getProjects().find((p) => p.id === projectId);
     if (project?.icon_storage_path) {
       this.removeProjectIcon(project.icon_storage_path);
     }
     const projects = this.getProjects().filter((p) => p.id !== projectId);
     this.setItem(STORAGE_KEYS.PROJECTS, projects);
-    // Also remove associated APK releases
+
     const releases = this.getApkReleases().filter((r) => r.projectId !== projectId);
     this.setItem(STORAGE_KEYS.RELEASES, releases);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('projects').delete().eq('id', projectId);
+      } catch (err) {
+        console.warn('Supabase deleteProject error:', err);
+      }
+    }
   }
 
   // ================= APK RELEASES =================
+  private mapApkReleaseFromDb(r: any): ApkRelease {
+    return {
+      id: String(r.id),
+      projectId: r.project_id || r.projectId || '',
+      projectName: r.project_name || r.projectName || '',
+      projectIcon: r.project_icon || r.projectIcon || 'home',
+      version: r.version || 'v1.0.0',
+      size: r.size || '15 MB',
+      releaseDate: r.release_date || r.releaseDate || '',
+      downloadUrl: r.download_url || r.downloadUrl || '',
+      releaseNotes: r.release_notes || r.releaseNotes || '',
+      isLatest: Boolean(r.is_latest ?? r.isLatest),
+      downloadsCount: Number(r.downloads_count ?? r.downloadsCount ?? 0),
+    };
+  }
+
+  private mapApkReleaseToDb(rel: ApkRelease): any {
+    return {
+      id: rel.id,
+      project_id: rel.projectId || null,
+      project_name: rel.projectName,
+      project_icon: rel.projectIcon || null,
+      version: rel.version,
+      size: rel.size,
+      release_date: rel.releaseDate,
+      download_url: rel.downloadUrl,
+      release_notes: rel.releaseNotes || null,
+      is_latest: Boolean(rel.isLatest),
+      downloads_count: Number(rel.downloadsCount || 0),
+    };
+  }
+
   public getApkReleases(): ApkRelease[] {
     return this.getItem<ApkRelease[]>(STORAGE_KEYS.RELEASES, initialApkReleases);
   }
 
-  public saveApkRelease(release: ApkRelease): ApkRelease {
+  public async fetchApkReleasesFromSupabase(): Promise<ApkRelease[] | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('apk_releases')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Supabase fetch releases error:', error.message);
+        return null;
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map((r) => this.mapApkReleaseFromDb(r));
+        this.setItem(STORAGE_KEYS.RELEASES, mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch apk releases from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async saveApkRelease(release: ApkRelease): Promise<ApkRelease> {
     const releases = this.getApkReleases();
     const index = releases.findIndex((r) => r.id === release.id);
     let updated: ApkRelease[];
@@ -349,7 +523,6 @@ class DataService {
       updated = [newRel, ...releases];
     }
 
-    // If marked as latest, update the corresponding project's apk size and version
     if (release.isLatest) {
       const projects = this.getProjects();
       const projIndex = projects.findIndex((p) => p.id === release.projectId || p.title === release.projectName);
@@ -363,12 +536,32 @@ class DataService {
     }
 
     this.setItem(STORAGE_KEYS.RELEASES, updated);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const row = this.mapApkReleaseToDb(release);
+        await supabase.from('apk_releases').upsert(row, { onConflict: 'id' });
+      } catch (err) {
+        console.warn('Supabase saveApkRelease error:', err);
+      }
+    }
+
     return index >= 0 ? updated[index] : updated[0];
   }
 
-  public deleteApkRelease(releaseId: string): void {
+  public async deleteApkRelease(releaseId: string): Promise<void> {
     const releases = this.getApkReleases().filter((r) => r.id !== releaseId);
     this.setItem(STORAGE_KEYS.RELEASES, releases);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('apk_releases').delete().eq('id', releaseId);
+      } catch (err) {
+        console.warn('Supabase deleteApkRelease error:', err);
+      }
+    }
   }
 
   private syncApkReleaseFromProject(project: Project): void {
@@ -409,36 +602,77 @@ class DataService {
       .sort((a, b) => a.display_order - b.display_order);
   }
 
-  public saveTechnology(tech: Technology): Technology {
+  public async fetchTechnologiesFromSupabase(): Promise<Technology[] | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('technologies')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Supabase fetch technologies error:', error.message);
+        return null;
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        this.setItem(STORAGE_KEYS.TECHNOLOGIES, data);
+        return data;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch technologies from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async saveTechnology(tech: Technology): Promise<Technology> {
     const list = this.getTechnologies();
     const index = list.findIndex((t) => t.id === tech.id);
     let updated: Technology[];
 
+    const finalTech: Technology = {
+      ...tech,
+      id: tech.id || `tech-${Date.now()}`,
+      display_order: tech.display_order || list.length + 1,
+      is_active: tech.is_active !== undefined ? tech.is_active : true,
+      updated_at: new Date().toISOString(),
+    };
+
     if (index >= 0) {
       updated = [...list];
-      updated[index] = {
-        ...tech,
-        updated_at: new Date().toISOString(),
-      };
+      updated[index] = finalTech;
     } else {
-      const newTech: Technology = {
-        ...tech,
-        id: tech.id || `tech-${Date.now()}`,
-        display_order: tech.display_order || list.length + 1,
-        is_active: tech.is_active !== undefined ? tech.is_active : true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      updated = [...list, newTech];
+      updated = [...list, finalTech];
     }
 
     this.setItem(STORAGE_KEYS.TECHNOLOGIES, updated);
-    return index >= 0 ? updated[index] : updated[updated.length - 1];
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('technologies').upsert(finalTech, { onConflict: 'id' });
+      } catch (err) {
+        console.warn('Supabase saveTechnology error:', err);
+      }
+    }
+
+    return finalTech;
   }
 
-  public deleteTechnology(techId: string): void {
+  public async deleteTechnology(techId: string): Promise<void> {
     const list = this.getTechnologies().filter((t) => t.id !== techId);
     this.setItem(STORAGE_KEYS.TECHNOLOGIES, list);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('technologies').delete().eq('id', techId);
+      } catch (err) {
+        console.warn('Supabase deleteTechnology error:', err);
+      }
+    }
   }
 
   public toggleTechnologyStatus(techId: string): Technology | undefined {
@@ -447,7 +681,7 @@ class DataService {
     if (index >= 0) {
       list[index].is_active = !list[index].is_active;
       list[index].updated_at = new Date().toISOString();
-      this.setItem(STORAGE_KEYS.TECHNOLOGIES, list);
+      this.saveTechnology(list[index]);
       return list[index];
     }
     return undefined;
@@ -456,37 +690,88 @@ class DataService {
   public reorderTechnologies(reordered: Technology[]): void {
     const updated = reordered.map((t, idx) => ({ ...t, display_order: idx + 1 }));
     this.setItem(STORAGE_KEYS.TECHNOLOGIES, updated);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      Promise.all(updated.map((t) => supabase.from('technologies').upsert(t, { onConflict: 'id' }))).catch((e) =>
+        console.warn('Supabase reorderTechnologies error:', e)
+      );
+    }
   }
 
-  // ================= TECHNOLOGY CATEGORIES =================
+  // Technology Categories
   public getTechnologyCategories(): TechnologyCategory[] {
     return this.getItem<TechnologyCategory[]>(STORAGE_KEYS.TECH_CATEGORIES, initialTechnologyCategories);
   }
 
-  public saveTechnologyCategory(category: TechnologyCategory): TechnologyCategory {
+  public async fetchTechnologyCategoriesFromSupabase(): Promise<TechnologyCategory[] | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('technology_categories')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Supabase fetch categories error:', error.message);
+        return null;
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        this.setItem(STORAGE_KEYS.TECH_CATEGORIES, data);
+        return data;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch categories from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async saveTechnologyCategory(category: TechnologyCategory): Promise<TechnologyCategory> {
     const list = this.getTechnologyCategories();
     const index = list.findIndex((c) => c.id === category.id);
     let updated: TechnologyCategory[];
 
+    const finalCat = {
+      ...category,
+      id: category.id || `cat-${Date.now()}`,
+    };
+
     if (index >= 0) {
       updated = [...list];
-      updated[index] = category;
+      updated[index] = finalCat;
     } else {
-      const newCat: TechnologyCategory = {
-        ...category,
-        id: category.id || `cat-${Date.now()}`,
-        display_order: category.display_order || list.length + 1,
-      };
-      updated = [...list, newCat];
+      updated = [...list, finalCat];
     }
 
     this.setItem(STORAGE_KEYS.TECH_CATEGORIES, updated);
-    return index >= 0 ? updated[index] : updated[updated.length - 1];
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('technology_categories').upsert(finalCat, { onConflict: 'id' });
+      } catch (err) {
+        console.warn('Supabase saveTechnologyCategory error:', err);
+      }
+    }
+
+    return finalCat;
   }
 
-  public deleteTechnologyCategory(categoryId: string): void {
+  public async deleteTechnologyCategory(categoryId: string): Promise<void> {
     const list = this.getTechnologyCategories().filter((c) => c.id !== categoryId);
     this.setItem(STORAGE_KEYS.TECH_CATEGORIES, list);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('technology_categories').delete().eq('id', categoryId);
+      } catch (err) {
+        console.warn('Supabase deleteTechnologyCategory error:', err);
+      }
+    }
   }
 
   // ================= PLATFORMS =================
@@ -500,37 +785,78 @@ class DataService {
       .sort((a, b) => a.display_order - b.display_order);
   }
 
-  public savePlatform(platform: Platform): Platform {
+  public async fetchPlatformsFromSupabase(): Promise<Platform[] | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('platforms')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Supabase fetch platforms error:', error.message);
+        return null;
+      }
+
+      if (Array.isArray(data) && data.length > 0) {
+        this.setItem(STORAGE_KEYS.PLATFORMS, data);
+        return data;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch platforms from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async savePlatform(platform: Platform): Promise<Platform> {
     const list = this.getPlatforms();
     const index = list.findIndex((p) => p.id === platform.id);
     let updated: Platform[];
 
+    const finalPlat: Platform = {
+      ...platform,
+      id: platform.id || `plat-${Date.now()}`,
+      slug: platform.slug || platform.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      display_order: platform.display_order || list.length + 1,
+      is_active: platform.is_active !== undefined ? platform.is_active : true,
+      updated_at: new Date().toISOString(),
+    };
+
     if (index >= 0) {
       updated = [...list];
-      updated[index] = {
-        ...platform,
-        updated_at: new Date().toISOString(),
-      };
+      updated[index] = finalPlat;
     } else {
-      const newPlat: Platform = {
-        ...platform,
-        id: platform.id || `plat-${Date.now()}`,
-        slug: platform.slug || platform.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        display_order: platform.display_order || list.length + 1,
-        is_active: platform.is_active !== undefined ? platform.is_active : true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      updated = [...list, newPlat];
+      updated = [...list, finalPlat];
     }
 
     this.setItem(STORAGE_KEYS.PLATFORMS, updated);
-    return index >= 0 ? updated[index] : updated[updated.length - 1];
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('platforms').upsert(finalPlat, { onConflict: 'id' });
+      } catch (err) {
+        console.warn('Supabase savePlatform error:', err);
+      }
+    }
+
+    return finalPlat;
   }
 
-  public deletePlatform(platformId: string): void {
+  public async deletePlatform(platformId: string): Promise<void> {
     const list = this.getPlatforms().filter((p) => p.id !== platformId);
     this.setItem(STORAGE_KEYS.PLATFORMS, list);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('platforms').delete().eq('id', platformId);
+      } catch (err) {
+        console.warn('Supabase deletePlatform error:', err);
+      }
+    }
   }
 
   public togglePlatformStatus(platformId: string): Platform | undefined {
@@ -539,7 +865,7 @@ class DataService {
     if (index >= 0) {
       list[index].is_active = !list[index].is_active;
       list[index].updated_at = new Date().toISOString();
-      this.setItem(STORAGE_KEYS.PLATFORMS, list);
+      this.savePlatform(list[index]);
       return list[index];
     }
     return undefined;
@@ -548,6 +874,13 @@ class DataService {
   public reorderPlatforms(reordered: Platform[]): void {
     const updated = reordered.map((p, idx) => ({ ...p, display_order: idx + 1 }));
     this.setItem(STORAGE_KEYS.PLATFORMS, updated);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      Promise.all(updated.map((p) => supabase.from('platforms').upsert(p, { onConflict: 'id' }))).catch((e) =>
+        console.warn('Supabase reorderPlatforms error:', e)
+      );
+    }
   }
 
   // Backward compatibility for Skill
@@ -555,12 +888,12 @@ class DataService {
     return this.getTechnologies();
   }
 
-  public saveSkill(skill: Skill): Skill {
+  public saveSkill(skill: Skill): Promise<Skill> {
     return this.saveTechnology(skill);
   }
 
-  public deleteSkill(skillId: string): void {
-    this.deleteTechnology(skillId);
+  public deleteSkill(skillId: string): Promise<void> {
+    return this.deleteTechnology(skillId);
   }
 
   // ================= WEBSITE CONTENT =================
@@ -568,8 +901,50 @@ class DataService {
     return this.getItem<WebsiteContent>(STORAGE_KEYS.CONTENT, initialWebsiteContent);
   }
 
-  public saveContent(content: WebsiteContent): WebsiteContent {
+  public async fetchContentFromSupabase(): Promise<WebsiteContent | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('website_content')
+        .select('*')
+        .eq('key', 'main')
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Supabase fetch content error:', error.message);
+        return null;
+      }
+
+      if (data?.data) {
+        this.setItem(STORAGE_KEYS.CONTENT, data.data);
+        return data.data as WebsiteContent;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch content from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async saveContent(content: WebsiteContent): Promise<WebsiteContent> {
     this.setItem(STORAGE_KEYS.CONTENT, content);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('website_content').upsert(
+          {
+            key: 'main',
+            data: content,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        );
+      } catch (err) {
+        console.warn('Supabase saveContent error:', err);
+      }
+    }
     return content;
   }
 
@@ -588,10 +963,131 @@ class DataService {
     return this.getItem<WebsiteSettings>(STORAGE_KEYS.SETTINGS, initialWebsiteSettings);
   }
 
-  public saveSettings(settings: WebsiteSettings): WebsiteSettings {
+  public async fetchSettingsFromSupabase(): Promise<WebsiteSettings | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('website_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Supabase fetch settings error:', error.message);
+        return null;
+      }
+
+      if (data) {
+        const local = this.getSettings();
+        const merged: WebsiteSettings = {
+          ...local,
+          websiteName: data.website_name || local.websiteName,
+          logoText: data.logo_text || local.logoText,
+          favicon: data.favicon || local.favicon,
+          seoTitle: data.seo_title || local.seoTitle,
+          seoDescription: data.seo_description || local.seoDescription,
+          socialPreviewImage: data.social_preview_image || local.socialPreviewImage,
+          themePreference: (data.theme_preference as any) || local.themePreference,
+        };
+        this.setItem(STORAGE_KEYS.SETTINGS, merged);
+        return merged;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch settings from Supabase:', err);
+    }
+    return null;
+  }
+
+  public async saveSettings(settings: WebsiteSettings): Promise<WebsiteSettings> {
     this.setItem(STORAGE_KEYS.SETTINGS, settings);
     resetSupabaseClient();
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('website_settings').upsert({
+          id: 1,
+          website_name: settings.websiteName,
+          logo_text: settings.logoText,
+          favicon: settings.favicon || null,
+          seo_title: settings.seoTitle,
+          seo_description: settings.seoDescription,
+          social_preview_image: settings.socialPreviewImage || null,
+          theme_preference: settings.themePreference,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('Supabase saveSettings error:', err);
+      }
+    }
+
     return settings;
+  }
+
+  // ================= ONE-CLICK INITIAL DATA SEEDER =================
+  public async seedSupabaseDatabase(): Promise<{ success: boolean; message: string }> {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return { success: false, message: 'Supabase is not connected. Enter Supabase URL and Anon Key first.' };
+    }
+
+    try {
+      // 1. Check if projects table exists and query count
+      const { data: existingProjects, error: projErr } = await supabase.from('projects').select('id').limit(1);
+      if (projErr) {
+        return {
+          success: false,
+          message: `Database error: "${projErr.message}". Please run supabase_schema.sql in your Supabase SQL Editor.`,
+        };
+      }
+
+      // Seed all projects
+      const currentProjects = this.getProjects();
+      for (const p of currentProjects) {
+        const row = this.mapProjectToDb(p);
+        await supabase.from('projects').upsert(row, { onConflict: 'id' });
+      }
+
+      // Seed technologies
+      const currentTechs = this.getTechnologies();
+      for (const t of currentTechs) {
+        await supabase.from('technologies').upsert(t, { onConflict: 'id' });
+      }
+
+      // Seed platforms
+      const currentPlatforms = this.getPlatforms();
+      for (const pl of currentPlatforms) {
+        await supabase.from('platforms').upsert(pl, { onConflict: 'id' });
+      }
+
+      // Seed technology categories
+      const currentCategories = this.getTechnologyCategories();
+      for (const cat of currentCategories) {
+        await supabase.from('technology_categories').upsert(cat, { onConflict: 'id' });
+      }
+
+      // Seed content
+      const currentContent = this.getContent();
+      await supabase.from('website_content').upsert(
+        { key: 'main', data: currentContent, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      );
+
+      // Seed APK releases
+      const currentReleases = this.getApkReleases();
+      for (const rel of currentReleases) {
+        await supabase.from('apk_releases').upsert(this.mapApkReleaseToDb(rel), { onConflict: 'id' });
+      }
+
+      return {
+        success: true,
+        message: `Successfully synchronized ${currentProjects.length} projects, ${currentTechs.length} technologies, platforms, and content to Supabase!`,
+      };
+    } catch (err: any) {
+      return { success: false, message: `Sync failed: ${err.message || err}` };
+    }
   }
 
   // ================= CONTACT MESSAGES =================
@@ -599,7 +1095,7 @@ class DataService {
     return this.getItem<ContactMessage[]>(STORAGE_KEYS.MESSAGES, []);
   }
 
-  public addMessage(name: string, email: string, message: string): ContactMessage {
+  public async addMessage(name: string, email: string, message: string): Promise<ContactMessage> {
     const msgs = this.getMessages();
     const newMsg: ContactMessage = {
       id: `msg-${Date.now()}`,
@@ -611,12 +1107,38 @@ class DataService {
     };
     const updated = [newMsg, ...msgs];
     this.setItem(STORAGE_KEYS.MESSAGES, updated);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('contact_messages').insert({
+          id: newMsg.id,
+          name,
+          email,
+          message,
+          read: false,
+          created_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('Supabase addMessage error:', err);
+      }
+    }
+
     return newMsg;
   }
 
-  public deleteMessage(id: string): void {
+  public async deleteMessage(id: string): Promise<void> {
     const updated = this.getMessages().filter((m) => m.id !== id);
     this.setItem(STORAGE_KEYS.MESSAGES, updated);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('contact_messages').delete().eq('id', id);
+      } catch (err) {
+        console.warn('Supabase deleteMessage error:', err);
+      }
+    }
   }
 
   // ================= TRAFFIC / ANALYTICS STATS =================
@@ -653,7 +1175,7 @@ class DataService {
       const release = releases.find((r) => r.projectId === projectId);
       if (release) {
         release.downloadsCount += 1;
-        this.setItem(STORAGE_KEYS.RELEASES, releases);
+        this.saveApkRelease(release);
       }
     }
   }
@@ -664,7 +1186,6 @@ class DataService {
   }
 
   public login(email: string, password: string): { success: boolean; user?: AdminUser; error?: string } {
-    // Allows admin@gotop.dev / admin123 or any admin username configured
     const normalizedEmail = email.trim().toLowerCase();
     if (
       (normalizedEmail === 'admin@gotop.dev' || normalizedEmail === 'admin' || normalizedEmail === 'admin@gotop-technologies.com') &&
@@ -674,7 +1195,6 @@ class DataService {
       return { success: true, user: defaultAdminUser };
     }
 
-    // Also support any password if user just typed 'admin' or custom admin
     if (normalizedEmail === 'admin' && (password === 'admin' || password === 'admin123')) {
       this.setItem(STORAGE_KEYS.AUTH, defaultAdminUser);
       return { success: true, user: defaultAdminUser };
@@ -691,7 +1211,6 @@ class DataService {
     return this.getAdminUser() !== null;
   }
 
-  // Reset to initial reference mock data
   public resetToFactoryDefaults(): void {
     this.setItem(STORAGE_KEYS.PROJECTS, initialProjects);
     this.setItem(STORAGE_KEYS.RELEASES, initialApkReleases);

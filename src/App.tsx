@@ -56,6 +56,51 @@ export function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Live Supabase Data Sync on App Mount & Tab Focus
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncLiveData = async () => {
+      try {
+        const [liveProjects, liveTech, livePlatforms, liveCategories, liveContent, liveReleases, liveSettings] =
+          await Promise.all([
+            dataService.fetchProjectsFromSupabase(),
+            dataService.fetchTechnologiesFromSupabase(),
+            dataService.fetchPlatformsFromSupabase(),
+            dataService.fetchTechnologyCategoriesFromSupabase(),
+            dataService.fetchContentFromSupabase(),
+            dataService.fetchApkReleasesFromSupabase(),
+            dataService.fetchSettingsFromSupabase(),
+          ]);
+
+        if (!isMounted) return;
+
+        if (liveProjects && liveProjects.length > 0) setProjects(liveProjects);
+        if (liveTech && liveTech.length > 0) setTechnologies(liveTech);
+        if (livePlatforms && livePlatforms.length > 0) setPlatforms(livePlatforms);
+        if (liveCategories && liveCategories.length > 0) setCategories(liveCategories);
+        if (liveContent) setContent(liveContent);
+        if (liveReleases && liveReleases.length > 0) setApkReleases(liveReleases);
+        if (liveSettings) setSettings(liveSettings);
+      } catch (err) {
+        console.warn('Live data sync notice:', err);
+      }
+    };
+
+    syncLiveData();
+
+    // Revalidate on window focus so public visitors or returning tabs get fresh updates
+    const handleFocus = () => {
+      syncLiveData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   // Sync document title with active page & SEO settings
   useEffect(() => {
     if (currentTab === 'project-detail') {
@@ -104,41 +149,41 @@ export function App() {
   };
 
   // Data Mutation Handlers
-  const handleSaveProject = (project: Project) => {
-    const saved = dataService.saveProject(project);
+  const handleSaveProject = async (project: Project) => {
+    const saved = await dataService.saveProject(project);
     setProjects(dataService.getProjects());
     setApkReleases(dataService.getApkReleases());
     addToast(`App "${saved.title}" saved successfully`, 'success');
   };
 
-  const handleDeleteProject = (projectId: string) => {
-    dataService.deleteProject(projectId);
+  const handleDeleteProject = async (projectId: string) => {
+    await dataService.deleteProject(projectId);
     setProjects(dataService.getProjects());
     setApkReleases(dataService.getApkReleases());
     addToast('Project removed', 'info');
   };
 
-  const handleSaveRelease = (release: ApkRelease) => {
-    dataService.saveApkRelease(release);
+  const handleSaveRelease = async (release: ApkRelease) => {
+    await dataService.saveApkRelease(release);
     setApkReleases(dataService.getApkReleases());
     setProjects(dataService.getProjects());
     addToast(`Release ${release.version} published`, 'success');
   };
 
-  const handleDeleteRelease = (releaseId: string) => {
-    dataService.deleteApkRelease(releaseId);
+  const handleDeleteRelease = async (releaseId: string) => {
+    await dataService.deleteApkRelease(releaseId);
     setApkReleases(dataService.getApkReleases());
     addToast('APK release deleted', 'info');
   };
 
-  const handleSavePlatform = (plat: Platform) => {
-    dataService.savePlatform(plat);
+  const handleSavePlatform = async (plat: Platform) => {
+    await dataService.savePlatform(plat);
     setPlatforms(dataService.getPlatforms());
     addToast(`Platform "${plat.name}" saved`, 'success');
   };
 
-  const handleDeletePlatform = (platId: string) => {
-    dataService.deletePlatform(platId);
+  const handleDeletePlatform = async (platId: string) => {
+    await dataService.deletePlatform(platId);
     setPlatforms(dataService.getPlatforms());
     addToast('Platform removed', 'info');
   };
@@ -148,14 +193,14 @@ export function App() {
     setPlatforms(dataService.getPlatforms());
   };
 
-  const handleSaveTechnology = (tech: Technology) => {
-    dataService.saveTechnology(tech);
+  const handleSaveTechnology = async (tech: Technology) => {
+    await dataService.saveTechnology(tech);
     setTechnologies(dataService.getTechnologies());
     addToast(`Technology "${tech.name}" saved`, 'success');
   };
 
-  const handleDeleteTechnology = (techId: string) => {
-    dataService.deleteTechnology(techId);
+  const handleDeleteTechnology = async (techId: string) => {
+    await dataService.deleteTechnology(techId);
     setTechnologies(dataService.getTechnologies());
     addToast('Technology removed', 'info');
   };
@@ -165,20 +210,20 @@ export function App() {
     setTechnologies(dataService.getTechnologies());
   };
 
-  const handleSaveCategory = (cat: TechnologyCategory) => {
-    dataService.saveTechnologyCategory(cat);
+  const handleSaveCategory = async (cat: TechnologyCategory) => {
+    await dataService.saveTechnologyCategory(cat);
     setCategories(dataService.getTechnologyCategories());
     addToast(`Category "${cat.name}" added`, 'success');
   };
 
-  const handleDeleteCategory = (catId: string) => {
-    dataService.deleteTechnologyCategory(catId);
+  const handleDeleteCategory = async (catId: string) => {
+    await dataService.deleteTechnologyCategory(catId);
     setCategories(dataService.getTechnologyCategories());
     addToast('Category removed', 'info');
   };
 
-  const handleSaveContent = (newContent: WebsiteContent) => {
-    dataService.saveContent(newContent);
+  const handleSaveContent = async (newContent: WebsiteContent) => {
+    await dataService.saveContent(newContent);
     setContent(newContent);
     addToast('Website content updated', 'success');
   };
@@ -188,8 +233,8 @@ export function App() {
     setSocialLinks(newLinks);
   };
 
-  const handleSaveSettings = (newSettings: WebsiteSettings) => {
-    dataService.saveSettings(newSettings);
+  const handleSaveSettings = async (newSettings: WebsiteSettings) => {
+    await dataService.saveSettings(newSettings);
     setSettings(newSettings);
     if (newSettings.themePreference !== 'auto') {
       setTheme(newSettings.themePreference);
@@ -197,15 +242,49 @@ export function App() {
     addToast('Website settings saved', 'success');
   };
 
-  const handleRefreshAllData = () => {
-    setProjects(dataService.getProjects());
-    setApkReleases(dataService.getApkReleases());
-    setPlatforms(dataService.getPlatforms());
-    setTechnologies(dataService.getTechnologies());
-    setCategories(dataService.getTechnologyCategories());
-    setContent(dataService.getContent());
+  const handleRefreshAllData = async () => {
+    try {
+      const [liveProjects, liveTech, livePlatforms, liveCategories, liveContent, liveReleases, liveSettings] =
+        await Promise.all([
+          dataService.fetchProjectsFromSupabase(),
+          dataService.fetchTechnologiesFromSupabase(),
+          dataService.fetchPlatformsFromSupabase(),
+          dataService.fetchTechnologyCategoriesFromSupabase(),
+          dataService.fetchContentFromSupabase(),
+          dataService.fetchApkReleasesFromSupabase(),
+          dataService.fetchSettingsFromSupabase(),
+        ]);
+
+      if (liveProjects && liveProjects.length > 0) setProjects(liveProjects);
+      else setProjects(dataService.getProjects());
+
+      if (liveTech && liveTech.length > 0) setTechnologies(liveTech);
+      else setTechnologies(dataService.getTechnologies());
+
+      if (livePlatforms && livePlatforms.length > 0) setPlatforms(livePlatforms);
+      else setPlatforms(dataService.getPlatforms());
+
+      if (liveCategories && liveCategories.length > 0) setCategories(liveCategories);
+      else setCategories(dataService.getTechnologyCategories());
+
+      if (liveContent) setContent(liveContent);
+      else setContent(dataService.getContent());
+
+      if (liveReleases && liveReleases.length > 0) setApkReleases(liveReleases);
+      else setApkReleases(dataService.getApkReleases());
+
+      if (liveSettings) setSettings(liveSettings);
+      else setSettings(dataService.getSettings());
+    } catch {
+      setProjects(dataService.getProjects());
+      setApkReleases(dataService.getApkReleases());
+      setPlatforms(dataService.getPlatforms());
+      setTechnologies(dataService.getTechnologies());
+      setCategories(dataService.getTechnologyCategories());
+      setContent(dataService.getContent());
+      setSettings(dataService.getSettings());
+    }
     setSocialLinks(dataService.getSocialLinks());
-    setSettings(dataService.getSettings());
     setTrafficStats(dataService.getTrafficStats());
     addToast('All data refreshed from database', 'info');
   };

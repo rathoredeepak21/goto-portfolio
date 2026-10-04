@@ -20,12 +20,32 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
+  const [syncingDatabase, setSyncingDatabase] = useState(false);
+  const [syncDatabaseStatus, setSyncDatabaseStatus] = useState<string | null>(null);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSaveSettings(formData);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const handleSyncDatabaseToSupabase = async () => {
+    setSyncingDatabase(true);
+    setSyncDatabaseStatus(null);
+    try {
+      const res = await dataService.seedSupabaseDatabase();
+      if (res.success) {
+        setSyncDatabaseStatus(res.message);
+        onRefreshAllData();
+      } else {
+        setSyncDatabaseStatus(`⚠️ ${res.message}`);
+      }
+    } catch (err: any) {
+      setSyncDatabaseStatus(`❌ Sync error: ${err?.message || err}`);
+    } finally {
+      setSyncingDatabase(false);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -333,6 +353,35 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
                   </div>
                   <span className="bucket-type-tag">Public</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Supabase Database Live Synchronization */}
+            <div className="active-buckets-card" style={{ marginTop: '1.25rem', borderColor: 'rgba(56, 189, 248, 0.3)' }}>
+              <div className="buckets-card-header">
+                <div>
+                  <span className="buckets-title">Live Supabase Database Synchronization</span>
+                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Synchronize your projects, technologies, platforms, and content to Supabase PostgreSQL database tables so public visitors on Vercel see real-time updates.
+                  </p>
+                </div>
+              </div>
+              <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleSyncDatabaseToSupabase}
+                  disabled={syncingDatabase}
+                  className="btn btn-primary"
+                  style={{ padding: '0.6rem 1.25rem', fontSize: '0.85rem' }}
+                >
+                  <RefreshCw size={15} className={syncingDatabase ? 'spin-icon' : ''} />
+                  <span>{syncingDatabase ? 'Synchronizing...' : 'Sync All Data to Supabase'}</span>
+                </button>
+                {syncDatabaseStatus && (
+                  <span className="connection-feedback-msg" style={{ fontSize: '0.85rem' }}>
+                    {syncDatabaseStatus}
+                  </span>
+                )}
               </div>
             </div>
 
