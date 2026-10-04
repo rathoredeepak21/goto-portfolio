@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScreenshotLightbox } from './ScreenshotLightbox';
 import { Maximize2, Layers } from 'lucide-react';
 
@@ -13,32 +13,78 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
 }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Reset index if screenshots change or shrink
+  useEffect(() => {
+    if (currentIndex >= (screenshots?.length || 0)) {
+      setCurrentIndex(0);
+    }
+  }, [screenshots?.length]);
+
+  // Reset index when app changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [appName]);
+
+  // Auto-change carousel with ~3.5 seconds interval
+  // Cycle: 0 -> 1 -> 2 -> ... -> N-1 -> 0
+  // Disables if only 1 screenshot, pauses while hovering
+  useEffect(() => {
+    if (!screenshots || screenshots.length <= 1 || isHovered) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % screenshots.length);
+    }, 3500);
+
+    return () => clearInterval(timer);
+  }, [screenshots?.length, currentIndex, isHovered]);
 
   if (!screenshots || screenshots.length === 0) {
     return null;
   }
 
-  const mainScreenshot = screenshots[0];
   const miniPreviews = screenshots.slice(1, 4);
   const moreCount = Math.max(0, screenshots.length - 4);
 
-  const openAt = (idx: number) => {
+  const openLightboxAt = (idx: number) => {
     setSelectedIndex(idx);
     setLightboxOpen(true);
+  };
+
+  const handleThumbnailClick = (targetIndex: number) => {
+    setCurrentIndex(targetIndex);
   };
 
   return (
     <div className="screenshot-gallery-container">
       {/* Featured Primary Mobile Phone Mockup */}
-      <div className="primary-phone-frame" onClick={() => openAt(0)}>
+      <div
+        className="primary-phone-frame"
+        onClick={() => openLightboxAt(currentIndex)}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        title="Click to zoom screenshot"
+      >
         <div className="phone-screen-glare" />
         <div className="phone-top-speaker" />
-        <img
-          src={mainScreenshot}
-          alt={`${appName} Main Screenshot`}
-          className="phone-screen-img"
-          loading="lazy"
-        />
+
+        {/* Smooth cross-fade rotating screens */}
+        <div className="phone-screens-wrapper">
+          {screenshots.map((src, idx) => (
+            <img
+              key={idx}
+              src={src}
+              alt={`${appName} Screenshot ${idx + 1}`}
+              className={`phone-screen-img ${idx === currentIndex ? 'active' : ''}`}
+              loading={idx === 0 ? 'eager' : 'lazy'}
+            />
+          ))}
+        </div>
+
         <div className="hover-expand-pill">
           <Maximize2 size={14} />
           <span>Click to Zoom</span>
@@ -47,22 +93,31 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
 
       {/* Thumbnails Row below primary screen */}
       <div className="gallery-thumbs-grid">
-        {miniPreviews.map((src, idx) => (
-          <div
-            key={idx}
-            className="thumb-card"
-            onClick={() => openAt(idx + 1)}
-            title={`View screenshot ${idx + 2}`}
-          >
-            <img src={src} alt={`${appName} thumb ${idx + 2}`} className="thumb-img" loading="lazy" />
-          </div>
-        ))}
+        {miniPreviews.map((src, idx) => {
+          const actualIndex = idx + 1;
+          const isActive = currentIndex === actualIndex;
+          return (
+            <div
+              key={idx}
+              className={`thumb-card ${isActive ? 'active' : ''}`}
+              onClick={() => handleThumbnailClick(actualIndex)}
+              title={`Switch to screenshot ${actualIndex + 1}`}
+            >
+              <img
+                src={src}
+                alt={`${appName} thumb ${actualIndex + 1}`}
+                className="thumb-img"
+                loading="lazy"
+              />
+            </div>
+          );
+        })}
 
-        {/* "+N More" interactive card matching reference */}
+        {/* "+N More" / "Full View" interactive card matching reference */}
         {moreCount > 0 ? (
           <div
             className="thumb-card more-card"
-            onClick={() => openAt(4)}
+            onClick={() => openLightboxAt(4)}
             title="View all screenshots"
           >
             <Layers size={18} color="#38bdf8" />
@@ -73,7 +128,7 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
           screenshots.length > 1 && (
             <div
               className="thumb-card more-card"
-              onClick={() => openAt(0)}
+              onClick={() => openLightboxAt(currentIndex)}
               title="View all gallery"
             >
               <Maximize2 size={16} color="#38bdf8" />
@@ -131,11 +186,31 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
           z-index: 5;
         }
 
+        .phone-screens-wrapper {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+        }
+
         .phone-screen-img {
+          position: absolute;
+          top: 0;
+          left: 0;
           width: 100%;
           height: 100%;
           object-fit: cover;
           display: block;
+          opacity: 0;
+          transform: scale(1.02);
+          transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+          pointer-events: none;
+        }
+
+        .phone-screen-img.active {
+          opacity: 1;
+          transform: scale(1);
+          pointer-events: auto;
         }
 
         .hover-expand-pill {
@@ -156,6 +231,7 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
           gap: 0.4rem;
           opacity: 0;
           transition: opacity 0.2s ease, transform 0.2s ease;
+          z-index: 10;
         }
 
         .primary-phone-frame:hover .hover-expand-pill {
@@ -179,12 +255,17 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
           border: 1px solid var(--border-subtle);
           cursor: pointer;
           position: relative;
-          transition: transform var(--transition-fast), border-color var(--transition-fast);
+          transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
         }
 
         .thumb-card:hover {
           transform: translateY(-2px);
           border-color: var(--neon-cyan);
+        }
+
+        .thumb-card.active {
+          border-color: var(--neon-cyan);
+          box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
         }
 
         .thumb-img {

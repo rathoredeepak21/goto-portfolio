@@ -18,6 +18,7 @@ import {
   Sparkles,
   Layers,
 } from 'lucide-react';
+import { dataService } from '../../services/dataService';
 
 interface AdminTechnologiesProps {
   technologies: Technology[];
@@ -134,17 +135,24 @@ export const AdminTechnologies: React.FC<AdminTechnologiesProps> = ({
     }
   };
 
-  // Handle local file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle local file upload (uploads to Supabase 'App Icon' bucket)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setFormLogoUrl(reader.result);
+    try {
+      const res = await dataService.uploadTechnologyIcon(file);
+      if (res?.url) {
+        setFormLogoUrl(res.url);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setFormLogoUrl(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Submit form

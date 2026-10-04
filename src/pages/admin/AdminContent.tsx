@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { WebsiteContent, SocialLink } from '../../types';
-import { Save, Sparkles, User, Mail, Globe, Check } from 'lucide-react';
+import { Save, Sparkles, User, Mail, Globe, Check, Upload, RefreshCw } from 'lucide-react';
+import { dataService } from '../../services/dataService';
 
 interface AdminContentProps {
   content: WebsiteContent;
@@ -19,6 +20,37 @@ export const AdminContent: React.FC<AdminContentProps> = ({
   const [formData, setFormData] = useState<WebsiteContent>({ ...content });
   const [socialsData, setSocialsData] = useState<SocialLink[]>([...socialLinks]);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Avatar upload state (Supabase 'Avatar Image' bucket)
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarUploadError(null);
+    setIsUploadingAvatar(true);
+
+    try {
+      const res = await dataService.uploadAvatarImage(file);
+      if (res?.url) {
+        setFormData((prev) => ({
+          ...prev,
+          about: { ...prev.about, avatarUrl: res.url },
+        }));
+      }
+    } catch (err: any) {
+      console.error('Failed to upload avatar:', err);
+      setAvatarUploadError(err.message || 'Failed to upload avatar.');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -239,18 +271,60 @@ export const AdminContent: React.FC<AdminContentProps> = ({
             </div>
 
             <div className="form-field">
-              <label className="modal-label">Avatar Image URL</label>
-              <input
-                type="url"
-                value={formData.about.avatarUrl}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    about: { ...formData.about, avatarUrl: e.target.value },
-                  })
-                }
-                className="modal-input"
-              />
+              <div className="label-with-action" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label className="modal-label" style={{ marginBottom: 0 }}>Avatar Profile Image</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input
+                    type="file"
+                    ref={avatarInputRef}
+                    onChange={handleAvatarFileChange}
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                    className="btn btn-secondary"
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                    title="Upload image to Supabase 'Avatar Image' bucket"
+                  >
+                    {isUploadingAvatar ? (
+                      <RefreshCw size={13} className="spin-icon" />
+                    ) : (
+                      <Upload size={13} />
+                    )}
+                    <span>{isUploadingAvatar ? 'Uploading...' : 'Upload to Supabase'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {avatarUploadError && (
+                <div style={{ padding: '0.5rem 0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '6px', color: '#f87171', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                  {avatarUploadError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                {formData.about.avatarUrl && (
+                  <div style={{ width: '42px', height: '42px', borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--neon-cyan)', flexShrink: 0 }}>
+                    <img src={formData.about.avatarUrl} alt="Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                )}
+                <input
+                  type="url"
+                  placeholder="https://... or upload above"
+                  value={formData.about.avatarUrl}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      about: { ...formData.about, avatarUrl: e.target.value },
+                    })
+                  }
+                  className="modal-input"
+                  style={{ flex: 1 }}
+                />
+              </div>
             </div>
 
             <div className="form-field">

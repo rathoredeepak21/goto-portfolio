@@ -82,40 +82,73 @@ class DataService {
     return projects.find((p) => p.slug.toLowerCase() === slug.toLowerCase() || p.id === slug);
   }
 
-  // Upload actual project app icon to Supabase Storage (with data URL offline fallback)
+  // Supabase Storage Bucket definitions matching user Supabase project
+  public static readonly BUCKETS = {
+    APP_ICON: { primary: 'App Icon', fallback: 'app-icon' },
+    SCREENSHOTS: { primary: 'Screenshots', fallback: 'screenshots' },
+    AVATAR_IMAGE: { primary: 'Avatar Image', fallback: 'avatar-image' },
+  };
+
+  // Helper to upload to Supabase with automatic bucket name fallback
+  private async uploadToBucket(
+    bucketConfig: { primary: string; fallback: string },
+    storagePath: string,
+    file: File | Blob
+  ): Promise<{ url: string; storagePath: string } | null> {
+    const supabase = getSupabaseClient();
+    if (!supabase) return null;
+
+    try {
+      // Try primary bucket first
+      let usedBucket = bucketConfig.primary;
+      let res = await supabase.storage
+        .from(bucketConfig.primary)
+        .upload(storagePath, file, { cacheControl: '3600', upsert: true });
+
+      // If primary bucket failed due to not found, try fallback slug
+      if (res.error && (res.error.message?.toLowerCase().includes('not found') || res.error.message?.toLowerCase().includes('bucket'))) {
+        const fallbackRes = await supabase.storage
+          .from(bucketConfig.fallback)
+          .upload(storagePath, file, { cacheControl: '3600', upsert: true });
+
+        if (!fallbackRes.error && fallbackRes.data) {
+          res = fallbackRes;
+          usedBucket = bucketConfig.fallback;
+        }
+      }
+
+      if (!res.error && res.data) {
+        const { data: publicUrlData } = supabase.storage
+          .from(usedBucket)
+          .getPublicUrl(storagePath);
+
+        return {
+          url: publicUrlData.publicUrl,
+          storagePath: `${usedBucket}::${storagePath}`,
+        };
+      }
+      console.warn(`Supabase upload to bucket "${bucketConfig.primary}" error:`, res.error);
+    } catch (err) {
+      console.warn(`Error during Supabase upload to bucket "${bucketConfig.primary}":`, err);
+    }
+    return null;
+  }
+
+  // Upload actual project app icon to Supabase Storage 'App Icon' bucket (with data URL offline fallback)
   public async uploadProjectIcon(
     projectId: string,
     file: File
   ): Promise<{ icon_url: string; icon_storage_path: string }> {
-    const supabase = getSupabaseClient();
     const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
     const cleanId = projectId.trim() || `proj-${Date.now()}`;
-    const storagePath = `projects/${cleanId}/icon.${fileExt}`;
+    const storagePath = `projects/${cleanId}/icon_${Date.now()}.${fileExt}`;
 
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('project-assets')
-          .upload(storagePath, file, {
-            cacheControl: '3600',
-            upsert: true,
-          });
-
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage
-            .from('project-assets')
-            .getPublicUrl(storagePath);
-
-          const finalUrl = publicUrlData.publicUrl;
-          return {
-            icon_url: finalUrl,
-            icon_storage_path: storagePath,
-          };
-        }
-        console.warn('Supabase storage upload error, using local fallback:', error);
-      } catch (err) {
-        console.warn('Error during Supabase storage upload, using local fallback:', err);
-      }
+    const uploaded = await this.uploadToBucket(DataService.BUCKETS.APP_ICON, storagePath, file);
+    if (uploaded) {
+      return {
+        icon_url: uploaded.url,
+        icon_storage_path: uploaded.storagePath,
+      };
     }
 
     // Local / Offline fallback: read as base64 data URL
@@ -140,13 +173,110 @@ class DataService {
   public async removeProjectIcon(storagePath?: string): Promise<void> {
     if (!storagePath || storagePath.startsWith('local/')) return;
     const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.storage.from('project-assets').remove([storagePath]);
-      } catch (err) {
-        console.warn('Failed to remove icon from Supabase storage:', err);
+    if (!supabase) return;
+
+    try {
+      if (storagePath.includes('::')) {
+        const [bucket, path] = storagePath.split('::');
+        await supabase.storage.from(bucket).remove([path]);
+      } else {
+        // Try App Icon, then fallback
+        await supabase.storage.from(DataService.BUCKETS.APP_ICON.primary).remove([storagePath]);
       }
+    } catch (err) {
+      console.warn('Failed to remove icon from Supabase storage:', err);
     }
+  }
+
+  // Upload project screenshot to Supabase Storage 'Screenshots' bucket
+  public async uploadScreenshot(
+    projectId: string,
+    file: File
+  ): Promise<{ url: string; storagePath: string }> {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const cleanId = projectId.trim() || `proj-${Date.now()}`;
+    const storagePath = `projects/${cleanId}/screen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+
+    const uploaded = await this.uploadToBucket(DataService.BUCKETS.SCREENSHOTS, storagePath, file);
+    if (uploaded) {
+      return uploaded;
+    }
+
+    // Offline fallback to data URL
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve({
+            url: reader.result,
+            storagePath: `local/${storagePath}`,
+          });
+        } else {
+          reject(new Error('Failed to convert screenshot to data URL'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read screenshot file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Upload avatar image to Supabase Storage 'Avatar Image' bucket
+  public async uploadAvatarImage(
+    file: File
+  ): Promise<{ url: string; storagePath: string }> {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const storagePath = `profile/avatar_${Date.now()}.${fileExt}`;
+
+    const uploaded = await this.uploadToBucket(DataService.BUCKETS.AVATAR_IMAGE, storagePath, file);
+    if (uploaded) {
+      return uploaded;
+    }
+
+    // Offline fallback to data URL
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve({
+            url: reader.result,
+            storagePath: `local/${storagePath}`,
+          });
+        } else {
+          reject(new Error('Failed to convert avatar to data URL'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read avatar file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Upload technology icon to Supabase Storage 'App Icon' bucket
+  public async uploadTechnologyIcon(
+    file: File
+  ): Promise<{ url: string; storagePath: string }> {
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const storagePath = `technologies/tech_${Date.now()}.${fileExt}`;
+
+    const uploaded = await this.uploadToBucket(DataService.BUCKETS.APP_ICON, storagePath, file);
+    if (uploaded) {
+      return uploaded;
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve({
+            url: reader.result,
+            storagePath: `local/${storagePath}`,
+          });
+        } else {
+          reject(new Error('Failed to convert icon to data URL'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read icon file'));
+      reader.readAsDataURL(file);
+    });
   }
 
   public saveProject(project: Project): Project {

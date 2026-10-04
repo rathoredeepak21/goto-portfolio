@@ -40,16 +40,32 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
 
     try {
       const testClient = createClient(formData.supabaseUrl.trim(), formData.supabaseAnonKey.trim());
-      const { error } = await testClient.storage.from('project-assets').list('', { limit: 1 });
+      
+      const bucketsToTest = [
+        { primary: 'App Icon', fallback: 'app-icon', label: 'App Icon' },
+        { primary: 'Screenshots', fallback: 'screenshots', label: 'Screenshots' },
+        { primary: 'Avatar Image', fallback: 'avatar-image', label: 'Avatar Image' },
+      ];
 
-      if (error) {
-        if (error.message?.toLowerCase().includes('not found') || error.message?.toLowerCase().includes('bucket')) {
-          setConnectionStatus('✅ Supabase connected! Notice: Create a Public bucket named "project-assets" in Supabase Storage.');
-        } else {
-          setConnectionStatus(`✅ Supabase credentials verified (${error.message}).`);
-        }
+      const results = await Promise.all(
+        bucketsToTest.map(async (b) => {
+          let res = await testClient.storage.from(b.primary).list('', { limit: 1 });
+          if (res.error && (res.error.message?.toLowerCase().includes('not found') || res.error.message?.toLowerCase().includes('bucket'))) {
+            res = await testClient.storage.from(b.fallback).list('', { limit: 1 });
+          }
+          return { name: b.label, ok: !res.error, error: res.error?.message };
+        })
+      );
+
+      const verified = results.filter((r) => r.ok).map((r) => r.name);
+      const missing = results.filter((r) => !r.ok).map((r) => r.name);
+
+      if (verified.length === 3) {
+        setConnectionStatus(`✅ Supabase connected & all 3 buckets verified: ${verified.join(', ')}!`);
+      } else if (verified.length > 0) {
+        setConnectionStatus(`✅ Supabase connected! Verified buckets: ${verified.join(', ')}. (Notice: Check Public permissions/policies for: ${missing.join(', ')})`);
       } else {
-        setConnectionStatus('✅ Connected to Supabase & "project-assets" bucket verified successfully!');
+        setConnectionStatus(`✅ Supabase credentials verified! Notice: Ensure Public buckets "${bucketsToTest.map(b => b.primary).join('", "')}" have RLS SELECT policy enabled.`);
       }
     } catch (err: any) {
       setConnectionStatus(`❌ Connection error: ${err?.message || 'Check URL and Anon Key.'}`);
@@ -286,6 +302,40 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
               )}
             </div>
 
+            {/* Active Buckets Overview */}
+            <div className="active-buckets-card">
+              <div className="buckets-card-header">
+                <span className="buckets-title">Configured Supabase Storage Buckets</span>
+                <span className="buckets-badge">3 Active</span>
+              </div>
+              <div className="buckets-list-grid">
+                <div className="bucket-item-pill">
+                  <span className="bucket-icon">📁</span>
+                  <div className="bucket-text-wrap">
+                    <span className="bucket-name">App Icon</span>
+                    <span className="bucket-purpose">Project logos & application icons</span>
+                  </div>
+                  <span className="bucket-type-tag">Public</span>
+                </div>
+                <div className="bucket-item-pill">
+                  <span className="bucket-icon">📁</span>
+                  <div className="bucket-text-wrap">
+                    <span className="bucket-name">Screenshots</span>
+                    <span className="bucket-purpose">Project screenshots & gallery images</span>
+                  </div>
+                  <span className="bucket-type-tag">Public</span>
+                </div>
+                <div className="bucket-item-pill">
+                  <span className="bucket-icon">📁</span>
+                  <div className="bucket-text-wrap">
+                    <span className="bucket-name">Avatar Image</span>
+                    <span className="bucket-purpose">User avatar & profile photographs</span>
+                  </div>
+                  <span className="bucket-type-tag">Public</span>
+                </div>
+              </div>
+            </div>
+
             {/* Backup & Factory Reset Actions */}
             <div className="database-tools-box">
               <h4 className="tools-box-title">Database Backup & Recovery</h4>
@@ -430,6 +480,85 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({
         .connection-feedback-msg {
           font-size: 0.85rem;
           color: var(--neon-cyan);
+          font-weight: 600;
+        }
+
+        .active-buckets-card {
+          margin-top: 1.5rem;
+          background: rgba(15, 23, 42, 0.6);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          padding: 1.25rem;
+        }
+
+        .buckets-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 1rem;
+        }
+
+        .buckets-title {
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: var(--text-main);
+        }
+
+        .buckets-badge {
+          font-size: 0.75rem;
+          font-weight: 700;
+          padding: 0.2rem 0.65rem;
+          background: rgba(16, 185, 129, 0.15);
+          color: #34d399;
+          border: 1px solid rgba(16, 185, 129, 0.3);
+          border-radius: 9999px;
+        }
+
+        .buckets-list-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 0.85rem;
+        }
+
+        .bucket-item-pill {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-subtle);
+          padding: 0.75rem 1rem;
+          border-radius: var(--radius-md);
+          position: relative;
+        }
+
+        .bucket-icon {
+          font-size: 1.25rem;
+        }
+
+        .bucket-text-wrap {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+        }
+
+        .bucket-name {
+          font-size: 0.88rem;
+          font-weight: 700;
+          color: var(--text-main);
+        }
+
+        .bucket-purpose {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          line-height: 1.2;
+        }
+
+        .bucket-type-tag {
+          font-size: 0.7rem;
+          padding: 0.15rem 0.45rem;
+          background: rgba(56, 189, 248, 0.12);
+          color: #38bdf8;
+          border-radius: 4px;
           font-weight: 600;
         }
 

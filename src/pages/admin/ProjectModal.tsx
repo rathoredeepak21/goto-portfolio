@@ -91,6 +91,11 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [iconUploadError, setIconUploadError] = useState<string | null>(null);
   const [iconDimensions, setIconDimensions] = useState<{ width: number; height: number } | null>(null);
 
+  // Screenshots upload state (Supabase 'Screenshots' bucket)
+  const screenshotFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploadingScreenshots, setIsUploadingScreenshots] = useState(false);
+  const [screenshotUploadError, setScreenshotUploadError] = useState<string | null>(null);
+
   // Detect if a real image icon is present
   const currentRealIcon =
     formData.icon_url ||
@@ -102,6 +107,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   useEffect(() => {
     setIconUploadError(null);
     setIconDimensions(null);
+    setScreenshotUploadError(null);
     if (project) {
       setFormData({
         ...project,
@@ -228,6 +234,42 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       ...formData,
       screenshots: formData.screenshots.filter((_, i) => i !== index),
     });
+  };
+
+  const handleScreenshotFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setScreenshotUploadError(null);
+    setIsUploadingScreenshots(true);
+
+    try {
+      const projectId = formData.id || formData.slug || `proj-${Date.now()}`;
+      const newUrls: string[] = [];
+
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        const res = await dataService.uploadScreenshot(projectId, file);
+        if (res?.url) {
+          newUrls.push(res.url);
+        }
+      }
+
+      if (newUrls.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          screenshots: [...prev.screenshots, ...newUrls],
+        }));
+      }
+    } catch (err: any) {
+      console.error('Failed to upload screenshot:', err);
+      setScreenshotUploadError(err.message || 'Failed to upload screenshot to Supabase.');
+    } finally {
+      setIsUploadingScreenshots(false);
+      if (screenshotFileInputRef.current) {
+        screenshotFileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleIconFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -706,11 +748,38 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           <div className="form-field">
             <div className="label-with-action">
               <label className="modal-label">Screenshots ({formData.screenshots.length})</label>
-              <button type="button" onClick={handleAddMockScreenshot} className="add-screenshot-btn">
-                <Plus size={14} />
-                <span>Add Mock Screen</span>
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  type="file"
+                  ref={screenshotFileInputRef}
+                  onChange={handleScreenshotFileChange}
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  style={{ display: 'none' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => screenshotFileInputRef.current?.click()}
+                  disabled={isUploadingScreenshots}
+                  className="add-screenshot-btn"
+                  style={{ background: 'rgba(56, 189, 248, 0.12)', borderColor: 'rgba(56, 189, 248, 0.3)', color: '#38bdf8' }}
+                  title="Upload to Supabase 'Screenshots' bucket"
+                >
+                  <Upload size={13} className={isUploadingScreenshots ? 'spin-icon' : ''} />
+                  <span>{isUploadingScreenshots ? 'Uploading...' : 'Upload Screenshot'}</span>
+                </button>
+                <button type="button" onClick={handleAddMockScreenshot} className="add-screenshot-btn">
+                  <Plus size={14} />
+                  <span>Add Mock Screen</span>
+                </button>
+              </div>
             </div>
+
+            {screenshotUploadError && (
+              <div className="icon-upload-error-box" style={{ marginTop: '0.4rem', marginBottom: '0.6rem' }}>
+                <span>{screenshotUploadError}</span>
+              </div>
+            )}
 
             <div className="screenshots-preview-strip">
               {formData.screenshots.map((s, idx) => (

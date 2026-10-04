@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
 
 interface ScreenshotLightboxProps {
@@ -17,6 +17,12 @@ export const ScreenshotLightbox: React.FC<ScreenshotLightboxProps> = ({
   onClose,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentIndex(initialIndex);
+    }
+  }, [isOpen, initialIndex]);
 
   if (!isOpen || screenshots.length === 0) return null;
 
