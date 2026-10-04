@@ -7,6 +7,7 @@ import {
   initialPlatforms,
   initialWebsiteContent,
   initialWebsiteSettings,
+  initialSocialLinks,
 } from '../src/services/mockData';
 
 const supabaseUrl = 'https://hxjmpwiiibqwkxscdsjh.supabase.co';
@@ -130,10 +131,10 @@ async function seed() {
     seo_description: initialWebsiteSettings.seoDescription || '',
     social_preview_image: initialWebsiteSettings.socialPreviewImage || null,
     theme_preference: initialWebsiteSettings.themePreference || 'dark',
-    contact_email: initialWebsiteSettings.contactEmail || 'contact@gotop-technologies.com',
-    contact_phone: initialWebsiteSettings.contactPhone || '+91 98765 43210',
-    contact_location: initialWebsiteSettings.contactLocation || 'India',
-    social_links: initialWebsiteSettings.socialLinks || [],
+    contact_email: initialWebsiteContent.contact?.email || 'contact@gotop-technologies.com',
+    contact_phone: initialWebsiteContent.contact?.phone || '+91 98765 43210',
+    contact_location: initialWebsiteContent.contact?.location || 'India',
+    social_links: initialSocialLinks || [],
     updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });
   if (settingsErr) console.error('Website settings error:', settingsErr.message);
