@@ -101,13 +101,13 @@ export function App() {
 
         if (!isMounted) return;
 
-        if (liveProjects && liveProjects.length > 0) setProjects(liveProjects);
-        if (liveTech && liveTech.length > 0) setTechnologies(liveTech);
-        if (livePlatforms && livePlatforms.length > 0) setPlatforms(livePlatforms);
-        if (liveCategories && liveCategories.length > 0) setCategories(liveCategories);
-        if (liveContent) setContent(liveContent);
-        if (liveReleases && liveReleases.length > 0) setApkReleases(liveReleases);
-        if (liveSettings) setSettings(liveSettings);
+        if (liveProjects !== null) setProjects(liveProjects);
+        if (liveTech !== null) setTechnologies(liveTech);
+        if (livePlatforms !== null) setPlatforms(livePlatforms);
+        if (liveCategories !== null) setCategories(liveCategories);
+        if (liveContent !== null) setContent(liveContent);
+        if (liveReleases !== null) setApkReleases(liveReleases);
+        if (liveSettings !== null) setSettings(liveSettings);
       } catch (err) {
         console.warn('Live data sync notice:', err);
       }
@@ -127,10 +127,20 @@ export function App() {
     };
   }, []);
 
+  // Safeguard: If currently on project-detail or screenshots and project was deleted, route safely to projects
+  useEffect(() => {
+    if (currentTab === 'project-detail' || currentTab === 'screenshots') {
+      const exists = projects.some((p) => p && (p.slug === selectedProjectSlug || p.id === selectedProjectSlug));
+      if (!exists) {
+        handleNavigate('projects', undefined, true);
+      }
+    }
+  }, [currentTab, selectedProjectSlug, projects]);
+
   // Sync document title with active page & SEO settings
   useEffect(() => {
     if (currentTab === 'project-detail') {
-      const proj = projects.find((p) => p.slug === selectedProjectSlug);
+      const proj = projects.find((p) => p && (p.slug === selectedProjectSlug || p.id === selectedProjectSlug));
       if (proj) {
         document.title = `${proj.title} - ${proj.subtitle} | ${settings.websiteName}`;
         return;
@@ -235,9 +245,28 @@ export function App() {
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    await dataService.deleteProject(projectId);
-    setProjects(dataService.getProjects());
+    const deletedProject = projects.find((p) => p.id === projectId);
+    const res = await dataService.deleteProject(projectId);
+    if (!res.success) {
+      addToast(res.error || 'Failed to delete project', 'info');
+      return;
+    }
+
+    const updatedProjects = dataService.getProjects();
+    setProjects(updatedProjects);
     setApkReleases(dataService.getApkReleases());
+
+    // If the deleted project was the currently selected project, update selectedProjectSlug
+    if (deletedProject && (selectedProjectSlug === deletedProject.slug || selectedProjectSlug === deletedProject.id)) {
+      const nextSlug = updatedProjects[0]?.slug || '';
+      setSelectedProjectSlug(nextSlug);
+
+      // If user was viewing project-detail or screenshots, safely route to projects page
+      if (currentTab === 'project-detail' || currentTab === 'screenshots') {
+        handleNavigate('projects', undefined, true);
+      }
+    }
+
     addToast('Project removed', 'info');
   };
 
@@ -449,9 +478,9 @@ export function App() {
 
   // Active Project for Detail & Screenshot views
   const activeProject =
-    projects.find((p) => p.slug === selectedProjectSlug) ||
-    projects.find((p) => p.slug === 'rentora') ||
-    projects[0];
+    projects.find((p) => p && (p.slug === selectedProjectSlug || p.id === selectedProjectSlug)) ||
+    projects.find((p) => p && p.slug === 'rentora') ||
+    (projects.length > 0 ? projects[0] : undefined);
 
   return (
     <div className="app-container">
@@ -491,12 +520,26 @@ export function App() {
           />
         )}
 
-        {currentTab === 'project-detail' && activeProject && (
-          <ProjectDetailPage
-            project={activeProject}
-            onBack={() => handleNavigate('projects')}
-            onDownloadApk={() => handleDownloadApk(activeProject)}
-          />
+        {currentTab === 'project-detail' && (
+          activeProject ? (
+            <ProjectDetailPage
+              project={activeProject}
+              onBack={() => handleNavigate('projects')}
+              onDownloadApk={() => handleDownloadApk(activeProject)}
+            />
+          ) : (
+            <div className="content-wrapper section-spacing" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+              <div className="neon-card" style={{ maxWidth: 480, margin: '0 auto', padding: '2.5rem' }}>
+                <h2 style={{ color: 'var(--text-main)', marginBottom: '0.75rem' }}>Project Not Found</h2>
+                <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                  This project may have been moved or removed from the portfolio.
+                </p>
+                <button onClick={() => handleNavigate('projects')} className="btn btn-primary">
+                  <span>Explore Other Projects</span>
+                </button>
+              </div>
+            </div>
+          )
         )}
 
         {currentTab === 'screenshots' && (

@@ -44,7 +44,11 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
   }, [screenshots?.length, currentIndex, isHovered]);
 
   if (!screenshots || screenshots.length === 0) {
-    return null;
+    return (
+      <div className="no-screenshots-placeholder" style={{ padding: '2.5rem 1rem', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>No screenshots uploaded for this project yet.</p>
+      </div>
+    );
   }
 
   const miniPreviews = screenshots.slice(1, 4);

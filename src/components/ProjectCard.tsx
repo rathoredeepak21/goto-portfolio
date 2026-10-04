@@ -10,6 +10,8 @@ interface ProjectCardProps {
 }
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onViewDetails }) => {
+  if (!project) return null;
+
   const renderIcon = (iconName: string) => {
     switch (iconName.toLowerCase()) {
       case 'home':

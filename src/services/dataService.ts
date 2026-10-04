@@ -39,6 +39,8 @@ const STORAGE_KEYS = {
 };
 
 class DataService {
+  private deletingProjects = new Set<string>();
+
   // Helper to get typed item from localStorage with fallback
   private getItem<T>(key: string, fallback: T): T {
     try {
@@ -356,8 +358,10 @@ class DataService {
         return null;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
-        const mapped = data.map((r) => this.mapProjectFromDb(r));
+      if (Array.isArray(data)) {
+        // Exclude any projects that are currently being deleted in-flight to prevent resurrection
+        const activeRows = data.filter((r) => !this.deletingProjects.has(String(r.id)));
+        const mapped = activeRows.map((r) => this.mapProjectFromDb(r));
         this.setItem(STORAGE_KEYS.PROJECTS, mapped);
         return mapped;
       }
@@ -420,24 +424,61 @@ class DataService {
     return index >= 0 ? updated[index] : updated[0];
   }
 
-  public async deleteProject(projectId: string): Promise<void> {
-    const project = this.getProjects().find((p) => p.id === projectId);
-    if (project?.icon_storage_path) {
-      this.removeProjectIcon(project.icon_storage_path);
+  public async deleteProject(projectId: string): Promise<{ success: boolean; error?: string }> {
+    if (!projectId) return { success: false, error: 'Project ID is required' };
+
+    // Prevent duplicate concurrent deletion requests for the same project
+    if (this.deletingProjects.has(projectId)) {
+      console.warn(`[dataService] Deletion already in progress for project: ${projectId}`);
+      return { success: true };
     }
-    const projects = this.getProjects().filter((p) => p.id !== projectId);
-    this.setItem(STORAGE_KEYS.PROJECTS, projects);
+    this.deletingProjects.add(projectId);
 
-    const releases = this.getApkReleases().filter((r) => r.projectId !== projectId);
-    this.setItem(STORAGE_KEYS.RELEASES, releases);
+    try {
+      // 1. Immediately update local storage to keep UI fast and responsive
+      const project = this.getProjects().find((p) => p.id === projectId);
+      const remainingProjects = this.getProjects().filter((p) => p.id !== projectId);
+      this.setItem(STORAGE_KEYS.PROJECTS, remainingProjects);
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('projects').delete().eq('id', projectId);
-      } catch (err) {
-        console.warn('Supabase deleteProject error:', err);
+      const remainingReleases = this.getApkReleases().filter((r) => r.projectId !== projectId);
+      this.setItem(STORAGE_KEYS.RELEASES, remainingReleases);
+
+      // 2. Safely remove associated storage icon if exists
+      if (project?.icon_storage_path) {
+        try {
+          await this.removeProjectIcon(project.icon_storage_path);
+        } catch (storageErr) {
+          console.warn('Notice: project icon storage deletion skipped or non-fatal:', storageErr);
+        }
       }
+
+      // 3. Exactly ONE database deletion in Supabase
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        // Clean related apk releases from Supabase to prevent orphaned records
+        try {
+          await supabase.from('apk_releases').delete().eq('project_id', projectId);
+        } catch (relErr) {
+          console.warn('Notice: cleaning apk_releases for project:', relErr);
+        }
+
+        // Delete project record
+        const { error } = await supabase.from('projects').delete().eq('id', projectId);
+        if (error) {
+          console.warn('Supabase deleteProject error:', error.message);
+          return { success: false, error: error.message };
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('deleteProject exception:', err);
+      return { success: false, error: err?.message || 'Delete operation failed' };
+    } finally {
+      // Keep in guard set for 1000ms to absorb any focus event or revalidation race conditions
+      setTimeout(() => {
+        this.deletingProjects.delete(projectId);
+      }, 1000);
     }
   }
 
@@ -493,8 +534,9 @@ class DataService {
         return null;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
-        const mapped = data.map((r) => this.mapApkReleaseFromDb(r));
+      if (Array.isArray(data)) {
+        const activeReleases = data.filter((r) => !this.deletingProjects.has(String(r.project_id)));
+        const mapped = activeReleases.map((r) => this.mapApkReleaseFromDb(r));
         this.setItem(STORAGE_KEYS.RELEASES, mapped);
         return mapped;
       }
@@ -615,7 +657,7 @@ class DataService {
         return null;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         this.setItem(STORAGE_KEYS.TECHNOLOGIES, data);
         return data;
       }
@@ -717,7 +759,7 @@ class DataService {
         return null;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         this.setItem(STORAGE_KEYS.TECH_CATEGORIES, data);
         return data;
       }
@@ -798,7 +840,7 @@ class DataService {
         return null;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         this.setItem(STORAGE_KEYS.PLATFORMS, data);
         return data;
       }

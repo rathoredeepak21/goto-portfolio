@@ -38,7 +38,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDeta
     { id: 'desktop', label: 'Desktop' },
   ];
 
-  const filteredProjects = projects.filter((project) => {
+  const filteredProjects = (projects || []).filter((project) => {
+    if (!project) return false;
     const q = searchQuery.toLowerCase().trim();
     if (q === 'admin') return false;
 
@@ -53,17 +54,17 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({ projects, onViewDeta
 
     const matchesPlatform =
       selectedPlatform === 'all' ||
-      platforms.some((p) => p.toLowerCase().includes(selectedPlatform));
+      platforms.some((p) => p && p.toLowerCase().includes(selectedPlatform));
 
     const matchesSearch =
       !q ||
-      project.title.toLowerCase().includes(q) ||
+      (project.title && project.title.toLowerCase().includes(q)) ||
       (project.subtitle && project.subtitle.toLowerCase().includes(q)) ||
       (project.shortDescription && project.shortDescription.toLowerCase().includes(q)) ||
       (project.fullDescription && project.fullDescription.toLowerCase().includes(q)) ||
-      project.category.toLowerCase().includes(q) ||
-      platforms.some((p) => p.toLowerCase().includes(q)) ||
-      project.technologies.some((t) => t.toLowerCase().includes(q));
+      (project.category && project.category.toLowerCase().includes(q)) ||
+      platforms.some((p) => p && p.toLowerCase().includes(q)) ||
+      (Array.isArray(project.technologies) && project.technologies.some((t) => t && t.toLowerCase().includes(q)));
 
     return matchesCategory && matchesPlatform && matchesSearch;
   });

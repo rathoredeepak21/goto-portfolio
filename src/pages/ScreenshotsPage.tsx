@@ -22,7 +22,20 @@ export const ScreenshotsPage: React.FC<ScreenshotsPageProps> = ({
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  if (!currentProject) return null;
+  if (!currentProject) {
+    return (
+      <div className="screenshots-page-view section-spacing">
+        <div className="content-wrapper" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: '#f8fafc' }}>No Screenshots Available</h2>
+          <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>No projects with screenshots are currently available.</p>
+          <button onClick={onBack} className="back-link-btn" style={{ margin: '0 auto', display: 'inline-flex' }}>
+            <ArrowLeft size={16} />
+            <span>Back to Projects</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const screenshots = currentProject.screenshots || [];
 

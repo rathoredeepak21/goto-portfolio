@@ -15,7 +15,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   projects,
   onNavigate,
 }) => {
-  const featuredProjects = projects.filter((p) => p.featured).slice(0, 4);
+  const featuredProjects = (projects || []).filter((p) => p && p.featured).slice(0, 4);
 
   return (
     <div className="home-page-view">

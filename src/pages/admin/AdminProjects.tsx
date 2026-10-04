@@ -21,6 +21,7 @@ export const AdminProjects: React.FC<AdminProjectsProps> = ({
 }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleCreateNew = () => {
     setEditingProject(null);
@@ -37,9 +38,20 @@ export const AdminProjects: React.FC<AdminProjectsProps> = ({
     setModalOpen(false);
   };
 
-  const handleDelete = (proj: Project) => {
-    if (window.confirm(`Are you sure you want to delete "${proj.title}"?`)) {
-      onDeleteProject(proj.id);
+  const handleDelete = async (e: React.MouseEvent, proj: Project) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (deletingId) return;
+
+    if (!window.confirm(`Are you sure you want to delete "${proj.title}"?`)) {
+      return;
+    }
+
+    setDeletingId(proj.id);
+    try {
+      await onDeleteProject(proj.id);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -172,9 +184,12 @@ export const AdminProjects: React.FC<AdminProjectsProps> = ({
                           <Edit2 size={15} />
                         </button>
                         <button
-                          onClick={() => handleDelete(project)}
+                          type="button"
+                          disabled={deletingId === project.id}
+                          onClick={(e) => handleDelete(e, project)}
                           className="action-icon-btn del-btn"
-                          title="Delete Project"
+                          title={deletingId === project.id ? 'Deleting...' : 'Delete Project'}
+                          style={deletingId === project.id ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                         >
                           <Trash2 size={15} />
                         </button>

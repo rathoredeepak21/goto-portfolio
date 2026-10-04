@@ -29,6 +29,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   onBack,
   onDownloadApk,
 }) => {
+  if (!project) {
+    return (
+      <div className="project-detail-view section-spacing">
+        <div className="content-wrapper" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: '#f8fafc' }}>Project Not Found</h2>
+          <p style={{ color: '#94a3b8', marginBottom: '2rem' }}>The requested project could not be found or has been removed.</p>
+          <button onClick={onBack} className="back-link-btn" style={{ margin: '0 auto', display: 'inline-flex' }}>
+            <ArrowLeft size={16} />
+            <span>Back to Projects</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const renderIcon = (iconName: string) => {
     switch (iconName.toLowerCase()) {
       case 'home':
@@ -54,6 +69,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       : project.category === 'web'
       ? ['Web Application']
       : ['Android App'];
+
+  const technologies = Array.isArray(project.technologies) ? project.technologies : [];
+  const features = Array.isArray(project.features) ? project.features : [];
+  const screenshots = Array.isArray(project.screenshots) ? project.screenshots : [];
 
   const realIcon =
     project.icon_url ||
@@ -116,7 +135,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             <div className="info-block">
               <h2 className="info-heading">Technologies Used</h2>
               <div className="tech-tags-list">
-                {project.technologies.map((tech) => (
+                {technologies.map((tech) => (
                   <TechnologyBadge key={tech} name={tech} />
                 ))}
               </div>
@@ -129,11 +148,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </div>
 
             {/* Key Features */}
-            {project.features && project.features.length > 0 && (
+            {features.length > 0 && (
               <div className="info-block">
                 <h2 className="info-heading">Key Features</h2>
                 <div className="features-checklist">
-                  {project.features.map((feature, idx) => (
+                  {features.map((feature, idx) => (
                     <div key={idx} className="feature-check-item">
                       <CheckCircle2 size={18} className="feature-check-icon" />
                       <span>{feature}</span>
@@ -168,7 +187,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           {/* Right Column: Screenshot Mockup & Gallery */}
           <div className="app-media-col">
             <h2 className="media-section-heading">Screenshots</h2>
-            <ScreenshotGallery appName={project.title} screenshots={project.screenshots} />
+            <ScreenshotGallery appName={project.title} screenshots={screenshots} />
           </div>
         </div>
       </div>

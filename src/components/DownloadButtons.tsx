@@ -13,6 +13,8 @@ export const DownloadButtons: React.FC<DownloadButtonsProps> = ({
   onDownloadApk,
   size = 'normal',
 }) => {
+  if (!project) return null;
+
   const showPlayStore = project.playStoreEnabled && Boolean(project.playStoreUrl?.trim());
   const showApk = project.apkDownloadEnabled && Boolean(project.apkDownloadUrl?.trim());
 
