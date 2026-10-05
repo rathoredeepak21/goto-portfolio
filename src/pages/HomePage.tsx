@@ -3,19 +3,27 @@ import { Project, WebsiteContent } from '../types';
 import { ProjectCard } from '../components/ProjectCard';
 import { HeroIllustration } from '../components/HeroIllustration';
 import { ArrowRight, Sparkles, Layers, Award, HeartHandshake } from 'lucide-react';
+import { initialWebsiteContent } from '../services/mockData';
 
 interface HomePageProps {
-  content: WebsiteContent;
+  content?: WebsiteContent;
   projects: Project[];
   onNavigate: (tab: string, slug?: string) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
-  content,
+  content: rawContent,
   projects,
   onNavigate,
 }) => {
-  const featuredProjects = (projects || []).filter((p) => p && p.featured).slice(0, 4);
+  const content = rawContent || initialWebsiteContent;
+  const hero = content.hero || initialWebsiteContent.hero;
+  const stats = content.stats || initialWebsiteContent.stats;
+
+  const validProjects = (projects || []).filter(Boolean);
+  const featuredOnly = validProjects.filter((p) => p.featured);
+  // If featured project exists, show it; if deleted, automatically select other valid projects
+  const featuredProjects = (featuredOnly.length > 0 ? featuredOnly : validProjects).slice(0, 4);
 
   return (
     <div className="home-page-view">
@@ -24,24 +32,24 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="content-wrapper hero-grid">
           {/* Hero Left Content */}
           <div className="hero-text-col">
-            <span className="hero-greeting">{content.hero.greeting}</span>
+            <span className="hero-greeting">{hero.greeting}</span>
             <h1 className="hero-headline">
-              <span className="gradient-text-cyan-purple">{content.hero.developerTitle}</span>
+              <span className="gradient-text-cyan-purple">{hero.developerTitle}</span>
             </h1>
-            <h2 className="hero-subheadline">{content.hero.subtitle}</h2>
+            <h2 className="hero-subheadline">{hero.subtitle}</h2>
 
             <div className="hero-tech-tags">
-              <span>{content.hero.techStack}</span>
+              <span>{hero.techStack}</span>
             </div>
 
-            <p className="hero-description">{content.hero.description}</p>
+            <p className="hero-description">{hero.description}</p>
 
             <div className="hero-cta-buttons">
               <button
                 onClick={() => onNavigate('projects')}
                 className="btn btn-primary"
               >
-                <span>{content.hero.primaryBtnText}</span>
+                <span>{hero.primaryBtnText}</span>
                 <ArrowRight size={17} />
               </button>
 
@@ -49,7 +57,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 onClick={() => onNavigate('contact')}
                 className="btn btn-secondary"
               >
-                <span>{content.hero.secondaryBtnText}</span>
+                <span>{hero.secondaryBtnText}</span>
               </button>
             </div>
           </div>
@@ -74,15 +82,21 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
 
           {/* 4 Cards Grid matching Panel 1 */}
-          <div className="featured-grid">
-            {featuredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onViewDetails={(slug) => onNavigate('project-detail', slug)}
-              />
-            ))}
-          </div>
+          {featuredProjects.length > 0 ? (
+            <div className="featured-grid">
+              {featuredProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onViewDetails={(slug) => onNavigate('project-detail', slug)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="no-projects-box neon-card" style={{ textAlign: 'center', padding: '3rem 1.5rem', margin: '1rem 0' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>No projects available yet. Stay tuned!</p>
+            </div>
+          )}
 
           <div className="featured-all-btn-row">
             <button
@@ -104,24 +118,24 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="stat-icon-wrapper cyan-glow">
                 <Layers size={26} color="#38bdf8" />
               </div>
-              <div className="stat-number gradient-text-cyan-purple">{content.stats.appsDeveloped}</div>
-              <div className="stat-label">{content.stats.appsDevelopedLabel}</div>
+              <div className="stat-number gradient-text-cyan-purple">{stats.appsDeveloped}</div>
+              <div className="stat-label">{stats.appsDevelopedLabel}</div>
             </div>
 
             <div className="stat-card neon-card">
               <div className="stat-icon-wrapper purple-glow">
                 <Award size={26} color="#a855f7" />
               </div>
-              <div className="stat-number gradient-text-cyan-purple">{content.stats.yearsExperience}</div>
-              <div className="stat-label">{content.stats.yearsExperienceLabel}</div>
+              <div className="stat-number gradient-text-cyan-purple">{stats.yearsExperience}</div>
+              <div className="stat-label">{stats.yearsExperienceLabel}</div>
             </div>
 
             <div className="stat-card neon-card">
               <div className="stat-icon-wrapper green-glow">
                 <HeartHandshake size={26} color="#10b981" />
               </div>
-              <div className="stat-number gradient-text-cyan-green">{content.stats.passion}</div>
-              <div className="stat-label">{content.stats.passionLabel}</div>
+              <div className="stat-number gradient-text-cyan-green">{stats.passion}</div>
+              <div className="stat-label">{stats.passionLabel}</div>
             </div>
           </div>
         </div>

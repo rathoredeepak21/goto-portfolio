@@ -3,17 +3,21 @@ import { WebsiteContent, SocialLink } from '../types';
 import { Mail, Phone, MapPin, Send, CheckCircle2, Sparkles } from 'lucide-react';
 import { SocialIcon } from '../components/SocialIcons';
 
+import { initialWebsiteContent, initialSocialLinks } from '../services/mockData';
+
 interface ContactPageProps {
-  content: WebsiteContent['contact'];
-  socialLinks: SocialLink[];
+  content?: WebsiteContent['contact'];
+  socialLinks?: SocialLink[];
   onSendMessage: (name: string, email: string, message: string) => void;
 }
 
 export const ContactPage: React.FC<ContactPageProps> = ({
-  content,
-  socialLinks,
+  content: rawContent,
+  socialLinks: rawSocialLinks,
   onSendMessage,
 }) => {
+  const content = rawContent || initialWebsiteContent.contact;
+  const socialLinks = rawSocialLinks || initialSocialLinks;
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);

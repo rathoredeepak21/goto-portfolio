@@ -3,13 +3,21 @@ import { WebsiteContent, SocialLink } from '../types';
 import { Heart } from 'lucide-react';
 import { SocialIcon } from './SocialIcons';
 
+import { initialWebsiteContent, initialSocialLinks } from '../services/mockData';
+
 interface FooterProps {
-  content: WebsiteContent['footer'];
-  socialLinks: SocialLink[];
+  content?: WebsiteContent['footer'];
+  socialLinks?: SocialLink[];
   onNavigate: (tab: string) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ content, socialLinks, onNavigate }) => {
+export const Footer: React.FC<FooterProps> = ({
+  content: rawContent,
+  socialLinks: rawSocialLinks,
+  onNavigate,
+}) => {
+  const content = rawContent || initialWebsiteContent.footer;
+  const socialLinks = rawSocialLinks || initialSocialLinks;
 
 
   return (
@@ -33,7 +41,7 @@ export const Footer: React.FC<FooterProps> = ({ content, socialLinks, onNavigate
         <div className="footer-social-section">
           <span className="footer-social-title">Follow Me</span>
           <div className="footer-social-icons">
-            {socialLinks.map((link) => (
+            {(socialLinks || []).map((link) => (
               <a
                 key={link.id}
                 href={link.url}

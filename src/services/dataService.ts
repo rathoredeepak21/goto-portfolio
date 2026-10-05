@@ -327,9 +327,10 @@ class DataService {
 
   public getProjects(): Project[] {
     const list = this.getItem<Project[]>(STORAGE_KEYS.PROJECTS, initialProjects);
-    return list.map((p) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter(Boolean).map((p) => {
       if (p.platforms && p.platforms.length > 0) return p;
-      const initP = initialProjects.find((ip) => ip.id === p.id || ip.slug === p.slug);
+      const initP = initialProjects.find((ip) => ip && (ip.id === p.id || ip.slug === p.slug));
       if (initP && initP.platforms && initP.platforms.length > 0) {
         return { ...p, platforms: initP.platforms };
       }

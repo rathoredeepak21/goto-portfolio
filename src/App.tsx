@@ -13,6 +13,7 @@ import { SkillsPage } from './pages/SkillsPage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminLogin } from './pages/admin/AdminLogin';
 import { AdminLayout } from './pages/admin/AdminLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // URL path to tab mapper
 function getInitialTab(): string {
@@ -29,13 +30,13 @@ function getInitialTab(): string {
 }
 
 function getInitialProjectSlug(): string {
-  if (typeof window === 'undefined') return 'rentora';
+  if (typeof window === 'undefined') return '';
   const path = window.location.pathname.toLowerCase();
   if (path.startsWith('/project/')) {
     const parts = path.split('/');
     if (parts[2]) return parts[2];
   }
-  return 'rentora';
+  return '';
 }
 
 export function App() {
@@ -477,10 +478,11 @@ export function App() {
   }
 
   // Active Project for Detail & Screenshot views
+  const validProjects = (projects || []).filter(Boolean);
   const activeProject =
-    projects.find((p) => p && (p.slug === selectedProjectSlug || p.id === selectedProjectSlug)) ||
-    projects.find((p) => p && p.slug === 'rentora') ||
-    (projects.length > 0 ? projects[0] : undefined);
+    (selectedProjectSlug ? validProjects.find((p) => p.slug === selectedProjectSlug || p.id === selectedProjectSlug) : undefined) ||
+    validProjects.find((p) => p.featured) ||
+    validProjects[0];
 
   return (
     <div className="app-container">
@@ -494,85 +496,87 @@ export function App() {
         isAdmin={Boolean(adminUser)}
       />
 
-      {/* Main Public Body */}
+      {/* Main Public Body protected by ErrorBoundary */}
       <main className="site-main">
-        {currentTab === 'home' && (
-          <HomePage
-            content={content}
-            projects={projects}
-            onNavigate={handleNavigate}
-          />
-        )}
-
-        {currentTab === 'about' && (
-          <AboutPage
-            content={content.about}
-            skills={technologies}
-            onNavigate={handleNavigate}
-          />
-        )}
-
-        {currentTab === 'projects' && (
-          <ProjectsPage
-            projects={projects}
-            onViewDetails={(slug) => handleNavigate('project-detail', slug)}
-            onNavigate={handleNavigate}
-          />
-        )}
-
-        {currentTab === 'project-detail' && (
-          activeProject ? (
-            <ProjectDetailPage
-              project={activeProject}
-              onBack={() => handleNavigate('projects')}
-              onDownloadApk={() => handleDownloadApk(activeProject)}
+        <ErrorBoundary>
+          {currentTab === 'home' && (
+            <HomePage
+              content={content}
+              projects={projects}
+              onNavigate={handleNavigate}
             />
-          ) : (
-            <div className="content-wrapper section-spacing" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-              <div className="neon-card" style={{ maxWidth: 480, margin: '0 auto', padding: '2.5rem' }}>
-                <h2 style={{ color: 'var(--text-main)', marginBottom: '0.75rem' }}>Project Not Found</h2>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-                  This project may have been moved or removed from the portfolio.
-                </p>
-                <button onClick={() => handleNavigate('projects')} className="btn btn-primary">
-                  <span>Explore Other Projects</span>
-                </button>
+          )}
+
+          {currentTab === 'about' && (
+            <AboutPage
+              content={content.about}
+              skills={technologies}
+              onNavigate={handleNavigate}
+            />
+          )}
+
+          {currentTab === 'projects' && (
+            <ProjectsPage
+              projects={projects}
+              onViewDetails={(slug) => handleNavigate('project-detail', slug)}
+              onNavigate={handleNavigate}
+            />
+          )}
+
+          {currentTab === 'project-detail' && (
+            activeProject ? (
+              <ProjectDetailPage
+                project={activeProject}
+                onBack={() => handleNavigate('projects')}
+                onDownloadApk={() => handleDownloadApk(activeProject)}
+              />
+            ) : (
+              <div className="content-wrapper section-spacing" style={{ textAlign: 'center', padding: '4rem 1rem' }}>
+                <div className="neon-card" style={{ maxWidth: 480, margin: '0 auto', padding: '2.5rem' }}>
+                  <h2 style={{ color: 'var(--text-main)', marginBottom: '0.75rem' }}>Project Not Found</h2>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
+                    This project may have been moved or removed from the portfolio.
+                  </p>
+                  <button onClick={() => handleNavigate('projects')} className="btn btn-primary">
+                    <span>Explore Other Projects</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )
-        )}
+            )
+          )}
 
-        {currentTab === 'screenshots' && (
-          <ScreenshotsPage
-            projects={projects}
-            activeSlug={selectedProjectSlug}
-            onBack={() => handleNavigate('project-detail', selectedProjectSlug)}
-            onSelectProject={(slug) => setSelectedProjectSlug(slug)}
-          />
-        )}
+          {currentTab === 'screenshots' && (
+            <ScreenshotsPage
+              projects={projects}
+              activeSlug={selectedProjectSlug}
+              onBack={() => handleNavigate('project-detail', selectedProjectSlug)}
+              onSelectProject={(slug) => setSelectedProjectSlug(slug)}
+            />
+          )}
 
-        {currentTab === 'skills' && (
-          <SkillsPage
-            technologies={technologies}
-            categories={categories}
-            onNavigate={handleNavigate}
-          />
-        )}
+          {currentTab === 'skills' && (
+            <SkillsPage
+              technologies={technologies}
+              categories={categories}
+              onNavigate={handleNavigate}
+            />
+          )}
 
-        {currentTab === 'contact' && (
-          <ContactPage
-            content={content.contact}
-            socialLinks={socialLinks}
-            onSendMessage={handleSendMessage}
-          />
-        )}
+          {currentTab === 'contact' && (
+            <ContactPage
+              content={content.contact}
+              socialLinks={socialLinks}
+              onSendMessage={handleSendMessage}
+            />
+          )}
 
-        {currentTab === 'admin' && !adminUser && (
-          <AdminLogin
-            onLogin={handleAdminLogin}
-            onCancel={() => handleNavigate('home')}
-          />
-        )}
+          {currentTab === 'admin' && !adminUser && (
+            <AdminLogin
+              onLogin={handleAdminLogin}
+              onCancel={() => handleNavigate('home')}
+            />
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Public Footer matching reference design */}

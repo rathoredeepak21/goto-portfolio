@@ -15,10 +15,11 @@ export const ScreenshotsPage: React.FC<ScreenshotsPageProps> = ({
   onBack,
   onSelectProject,
 }) => {
+  const validProjects = (projects || []).filter(Boolean);
   const currentProject =
-    projects.find((p) => p.slug === activeSlug) ||
-    projects.find((p) => p.slug === 'rentora') ||
-    projects[0];
+    (activeSlug ? validProjects.find((p) => p.slug === activeSlug || p.id === activeSlug) : undefined) ||
+    validProjects.find((p) => p.featured) ||
+    validProjects[0];
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -68,7 +69,7 @@ export const ScreenshotsPage: React.FC<ScreenshotsPageProps> = ({
               }}
               className="app-select-dropdown"
             >
-              {projects.map((p) => (
+              {validProjects.map((p) => (
                 <option key={p.id} value={p.slug}>
                   {p.title}
                 </option>

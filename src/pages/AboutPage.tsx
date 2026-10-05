@@ -3,17 +3,20 @@ import { WebsiteContent, Technology } from '../types';
 import { TechnologyCard } from '../components/TechnologyCard';
 import { Target, Zap, UserCheck, BookOpen, Sparkles, ArrowRight } from 'lucide-react';
 
+import { initialWebsiteContent } from '../services/mockData';
+
 interface AboutPageProps {
-  content: WebsiteContent['about'];
+  content?: WebsiteContent['about'];
   skills: Technology[];
   onNavigate: (tab: string) => void;
 }
 
 export const AboutPage: React.FC<AboutPageProps> = ({
-  content,
+  content: rawContent,
   skills,
   onNavigate,
 }) => {
+  const content = rawContent || initialWebsiteContent.about;
   const getHighlightIcon = (iconName: string) => {
     switch (iconName) {
       case 'target':
@@ -55,7 +58,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             <p className="about-bio-text">{content.description}</p>
 
             <div className="about-highlights-list">
-              {content.highlights.map((hl) => (
+              {(content.highlights || []).map((hl) => (
                 <div key={hl.id} className="highlight-item neon-card">
                   <div className="hl-icon-box">{getHighlightIcon(hl.icon)}</div>
                   <span className="hl-title">{hl.title}</span>
